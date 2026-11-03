@@ -303,8 +303,12 @@ class OpenAIAdapter(BaseProviderAdapter):
                 delta = choices[0].get("delta") or {}
                 piece = delta.get("content")
                 if piece:
+                    if sink.ready_to_stop():  # 核对线要它停、已流出的话正停在句界上:这一段不再流出
+                        break
                     content_parts.append(piece)
                     sink.feed(piece)
+                    if sink.ready_to_stop():  # 核对线要它停(core/live_check.py):到句界收住,带着更正接着说
+                        break
                 for delta_tc in delta.get("tool_calls") or []:
                     if isinstance(delta_tc, dict):
                         self._merge_tool_call_delta(tool_acc, delta_tc)
@@ -1016,8 +1020,12 @@ class OllamaAdapter(LocalModelTimeouts, BaseProviderAdapter):
                 _cmsg = chunk.get("message") or {}
                 piece = _cmsg.get("content", "")
                 if piece:
+                    if sink.ready_to_stop():  # 核对线要它停、已停在句界上:断开流,Ollama 随之停止生成
+                        break
                     content_parts.append(piece)
                     sink.feed(piece)
+                    if sink.ready_to_stop():  # 到句界收住:断开流,Ollama 随之停止生成
+                        break
                 # 工具调用块:Ollama 流式在(通常是末尾的)块上整只给出
                 # message.tool_calls,不是 OpenAI 式碎片增量——直接收集,
                 # 绝不喂 sink(工具调用不是正文)。

@@ -31,7 +31,7 @@ logger = logging.getLogger("Galaxy.ContextTrim")
 #
 # ``context__`` 在列是有讲究的:``slim_tools`` 在**工具表过大**时才裁,而工具表过大
 # 恰恰是最需要上下文管理的时刻。把它裁掉等于"窗口越紧,模型越没法自救"——方向反了。
-_CORE_TOOL_MARKERS = ("memory__", "ask_human__", "context__", "tuning__")
+_CORE_TOOL_MARKERS = ("memory__", "ask_human__", "context__", "tuning__", "nodes__")
 
 
 def _env_int(name: str, default: int) -> int:

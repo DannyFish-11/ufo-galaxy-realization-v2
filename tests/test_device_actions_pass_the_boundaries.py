@@ -100,16 +100,15 @@ def env(tmp_path, monkeypatch):
         asked.confirms.append(kw)
         return ConfirmationOutcome(asked.approve, "用户已明确批准" if asked.approve else "用户明确拒绝")
 
-    async def fake_deciders(what):
-        return list(asked.deciders) if what == "answers_decisions" else []
+    async def fake_deciders():
+        return list(asked.deciders)
 
-    import core.device_declarations as dd
     import core.interaction.high_risk_confirmation as hrc
     import core.interaction.pending_decision_registry as pdr
 
     monkeypatch.setattr(pdr, "request_human_decision", fake_decision)
     monkeypatch.setattr(hrc, "confirm_high_risk_tool", fake_confirm)
-    monkeypatch.setattr(dd, "online_devices_that", fake_deciders)
+    monkeypatch.setattr(pdr, "discover_answering_devices", fake_deciders)
     yield SimpleNamespace(add=add, asked=asked)
     ap.reset_grant_store()
     reset_unified_device_manager()
@@ -201,12 +200,12 @@ def test_bad_parameters_never_reach_the_device(env):
 
 
 def test_through_the_real_gateway_reads_go_asks_wait_and_bad_parameters_stay_home(gateway, phone_id, monkeypatch):
-    import core.device_declarations as dd
+    import core.interaction.pending_decision_registry as pdr
 
-    async def nobody(what):
+    async def nobody():
         return []
 
-    monkeypatch.setattr(dd, "online_devices_that", nobody)
+    monkeypatch.setattr(pdr, "discover_answering_devices", nobody)
     with _connect(gateway, phone_id) as ws:
         _join(ws, phone_id, ["location", "sms", "app_control"])
         assert _eventually(lambda: "app_control" in _card_actions(phone_id))

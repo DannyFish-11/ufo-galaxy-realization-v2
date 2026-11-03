@@ -53,7 +53,7 @@ class OmniSimpleMemProvider(MemoryProvider):
         if self._mem is None:
             from simplemem import SimpleMemSystem
 
-            db_dir = os.getenv("GALAXY_OMNIMEM_DIR", data_path("omni_simplemem"))
+            db_dir = os.getenv("GALAXY_OMNIMEM_DIR") or data_path("omni_simplemem")  # 空串当没设
             try:
                 os.makedirs(db_dir, exist_ok=True)
             except Exception:  # noqa: BLE001

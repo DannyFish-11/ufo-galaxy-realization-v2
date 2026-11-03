@@ -516,6 +516,9 @@ except ImportError as _exc:  # fastapi/uvicorn 不在 —— 节点降级为「�
     logger.warning("FastAPI/uvicorn 不可用，HTTP 服务不启动：%s", _exc)
     _health_app = None
 
+#: 统一执行器在进程内调这个节点时按 main.py 上的 ``app`` 找路由(core/node_route_bridge.py);同一个应用,鉴权已装
+app = _health_app
+
 
 if __name__ == "__main__":
     if "--demo" in _sys.argv:

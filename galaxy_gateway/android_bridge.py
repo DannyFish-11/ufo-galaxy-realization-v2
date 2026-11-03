@@ -450,6 +450,7 @@ class AndroidBridge:
     def _write_registration_to_udm(self, device_id: str, message: Dict[str, Any]) -> None:
         """Write canonical device identity/state to UnifiedDeviceManager on registration."""
         try:
+            from core import approvers
             from core.device_onboarding.taxonomy import classify_type
             from core.unified.device_manager import UnifiedDeviceManager
             from core.unified.models import UnifiedDevice, UnifiedDeviceType
@@ -501,6 +502,10 @@ class AndroidBridge:
                     or ""
                 ).lower()
                 or None,
+                # 设备自己报的种类原话(别家生态、新种类分类认不出时,卡上照它说的显示)
+                "reported_type": str(message.get("device_type") or "").strip() or None,
+                # 登记帧里就说了「我能回答批准」的也记下(core/approvers.py;报能力时会再记一遍)
+                approvers.METADATA_FLAG: approvers.declared(message),
             }
             metadata = {k: v for k, v in metadata.items() if v is not None}
 

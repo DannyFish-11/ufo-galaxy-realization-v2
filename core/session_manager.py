@@ -254,10 +254,10 @@ class SessionManager:
         # /api/v1/sessions/reconcile 把它「认领」到桌面的用户主线上——之后该本地
         # session_id 的所有轮次(在线 goal_execution / 离线补录)都落进同一条主线。
         self._session_aliases: Dict[str, str] = {}
-        # 会话更新回调（用于 WebSocket 广播）
-        self._on_update_callback = None
-        self._lock = LoopLocalLock()  # 本单例不止被一个事件循环用到,一把 asyncio.Lock 会被绑死在头一个上
-        # 证据链是同步快路径(任意调用方都能写),用独立的线程锁,不与上面的锁纠缠(免得在同步语境里 await)。
+        self._on_update_callback = None  # 会话更新回调（用于 WebSocket 广播）
+        self._lock = LoopLocalLock()  # 每个事件循环一把:整个进程一把会绑在第一个排队的循环上(core/loop_local_lock.py)
+        # 证据链是同步、可被任意(同步/异步)调用方写入的快路径，用独立的线程锁保护，
+        # 不与上面的 asyncio.Lock 纠缠（避免在同步上下文里 await）。
         self._evidence_lock = threading.Lock()
         self._load_state()
         logger.info("SessionManager 已初始化")
@@ -634,6 +634,26 @@ class SessionManager:
             payload={"role": role, "device_id": device_id, "content": content},
             trace_id=(metadata or {}).get("trace_id", ""),
         )
+        return True
+
+    async def revise_message(self, session_id: str, contains: str, rewrite: Any, revisions: List[Dict]) -> bool:
+        """晚到的勘误（``core/live_check_late.py``）：最近一条含 ``contains`` 的助手消息换成 ``rewrite(原文)``，
+        修订追加进它的 ``metadata["revisions"]``（面板重开照样画得出）。找不到这条就什么都不改，返回 False。"""
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            msg = next(
+                (
+                    m
+                    for m in reversed(session.history if session else [])
+                    if m.role == "assistant" and contains in m.content
+                ),
+                None,
+            )
+            if msg is None:
+                return False
+            msg.content = rewrite(msg.content)
+            msg.metadata = {**msg.metadata, "revisions": list(msg.metadata.get("revisions") or []) + list(revisions)}
+            await self._persist_off_loop()
         return True
 
     def get_history(self, session_id: str, max_turns: int = 20) -> List[Dict]:

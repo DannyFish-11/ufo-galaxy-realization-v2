@@ -7,7 +7,8 @@
 
 * ``/api/devices/register`` / ``list`` / ``heartbeat`` / ``unregister`` 四条旧 REST
   别名,此前只有一行 ``logger.info``。日志会滚,没有任何一处能回答"上周有多少次调用"。
-* ``/ws/android/{device_id}`` 与 ``/ws/android`` 两条 compat WS 入口同理。
+* ``/ws/android/{device_id}`` 与 ``/ws/android`` 两条 compat WS 入口同理 —— 这两条连同 ``/ws/ufo3/{device_id}``
+  已于 2026-11-02 退役(两个 App 的全部提交历史里一次都没连过,所有者定的),表里只剩 REST 别名。
 
 于是退役日期只能拍脑袋定。定早了打死还在用的客户端,定晚了这些面继续常开 ——
 而它们每一条都是攻击面。
@@ -54,9 +55,6 @@ COMPAT_SURFACES: Dict[str, str] = {
     "/api/devices/list": "rest_alias",
     "/api/devices/heartbeat": "rest_alias",
     "/api/devices/unregister": "rest_alias",
-    "/ws/android/{device_id}": "ws_ingress",
-    "/ws/android": "ws_ingress",
-    "/ws/ufo3/{device_id}": "ws_ingress",
 }
 
 #: 退役时刻(RFC 8594 ``Sunset``)。**空串 = 还没定**,那时不发这个头。
@@ -123,9 +121,6 @@ def _canonical_for(surface: str) -> str:
         "/api/devices/register": "/api/v1/devices/register",
         "/api/devices/list": "/api/v1/devices",
         "/api/devices/heartbeat": "/api/v1/devices/status",
-        "/ws/android/{device_id}": "/ws/device/{device_id}",
-        "/ws/android": "/ws/device/{device_id}",
-        "/ws/ufo3/{device_id}": "/ws/device/{device_id}",
     }.get(str(surface or "").strip(), "")
 
 

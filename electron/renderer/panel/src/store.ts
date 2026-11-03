@@ -22,6 +22,7 @@ import type {
   GitHubAddon,
   GitHubAddonStatus,
   IsolatedResult,
+  PendingApproval,
   PendingDevice,
   PanelSelf,
   UserProvider,
@@ -164,6 +165,12 @@ export interface HudState {
   /** 上一次「接入 / 不接入」的结论。空 = 没有要说的。 */
   readonly pendingDevicesNotice: string;
 
+  /** 等人批准的操作(core/approval_gate.py)。null = **还没拉到**,[] = 一条都没有(整段不画)。 */
+  readonly approvals: readonly PendingApproval[] | null;
+  readonly approvalsBusy: boolean;
+  /** 上一次「批准 / 不要」的结论。空 = 没有要说的。 */
+  readonly approvalsNotice: string;
+
   /** 右上那块岛展开了没有 */
   readonly islandOpen: boolean;
   /** 底下两个浮层,同一时刻最多开一个 */
@@ -216,6 +223,9 @@ export const initialState: HudState = {
   pendingDevices: null,
   pendingDevicesBusy: false,
   pendingDevicesNotice: '',
+  approvals: null,
+  approvalsBusy: false,
+  approvalsNotice: '',
   islandOpen: false,
   popover: null,
 };

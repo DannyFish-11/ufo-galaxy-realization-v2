@@ -108,6 +108,7 @@ async def run_react_tool_loop(
     reflect: Optional[Callable[[str], Awaitable[Optional[Dict[str, Any]]]]] = None,
     max_reflection_rounds: int = 0,
     loop_detection_window: int = 2,
+    tools: Optional[List[Dict[str, Any]]] = None,
 ) -> ToolLoopResult:
     """统一的 native function-calling ReAct 循环（供同构的两处复用）。
 
@@ -122,6 +123,8 @@ async def run_react_tool_loop(
             返回 None 即放行（反思绝不阻断交付）。
         max_reflection_rounds: 反思最多触发轮数（消耗同一 max_iterations 预算）。
         loop_detection_window: 连续相同 tool-call 签名达此次数即终止（0 关闭）。
+        tools: 这一轮提供给模型的工具表。给了就在派发前做规则校验(``core.tool_call_validator``:工具在不在表里、
+            参数合不合 schema),不合格不派发、把原因回喂 —— 与主循环同一道校验。
     """
     resp: Any = None
     iteration = 0
@@ -182,16 +185,27 @@ async def run_react_tool_loop(
             except (ValueError, TypeError):
                 tc_args = {}
 
-            result = await dispatch_tool(tc_name, tc_args)
+            from core.tool_call_validator import validate_tool_call
+
+            check = validate_tool_call(tc_name, tc_args, tools) if tools else None
+            if check is not None and not check.valid:
+                result = {"success": False, "error": check.feedback_text()}  # 不派发:错误在校验里死,不在真实世界死
+            else:
+                result = await dispatch_tool(tc_name, tc_args)
+            # 这一轮真实做了什么(边说边核拿它核「做好了」,core/live_check.py)—— 与主循环同一本账
+            from core.live_check import note_tool_outcome
+
+            ok = isinstance(result, dict) and result.get("success", True) is not False
+            note_tool_outcome(tc_name, ok, str(result.get("error") or "") if isinstance(result, dict) else "")
             if on_tool_result is not None:
                 try:
                     on_tool_result(tc_name, tc_args, result, iteration - 1)
                 except Exception as exc:  # noqa: BLE001 — 记录副作用不应中断循环
                     logger.debug("on_tool_result hook failed: %s", exc)
 
-            from core.react_progress import tool_result_text
+            from core.tool_result_text import tool_result_text
 
-            result_str = tool_result_text(result)
+            result_str = tool_result_text(result)  # 与主循环同一个说法:结果不在 result 键里的也交得过去
             messages.append(
                 {
                     "role": "tool",

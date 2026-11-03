@@ -120,6 +120,8 @@ class KnowledgeChunk:
         relevance_score — 与查询的相关性评分（0.0–1.0）
         tags           — 语义标签（用于过滤和检索增强）
         metadata       — 来源后端的扩展元数据
+        timestamp      — 这条知识是什么时候收进来的（epoch 秒；0 = 后端没说）。渲染进 prompt 的标题里带着它
+                         —— 模型看不见资料有多旧，就会把三年前的版本号当成现在的说出来
 
     ``chunk_id`` 是**回读把手**：它必须一路活到渲染进 prompt 的那段文字里
     （见 :meth:`RAGMemory.format_rag_context`），否则模型看到一段被截断的知识
@@ -133,6 +135,25 @@ class KnowledgeChunk:
     relevance_score: float = 0.0
     tags: List[str] = field(default_factory=list)
     metadata: Dict = field(default_factory=dict)
+    timestamp: float = 0.0
+
+
+def _epoch(value: Any) -> float:
+    """后端给的时间(epoch 秒 / ISO 字符串)→ epoch 秒;认不出就是 0(不知道),不猜。"""
+    if isinstance(value, (int, float)) and value > 0:
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            from datetime import datetime
+
+            return datetime.fromisoformat(value.strip().replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def _when(ts: float) -> str:
+    return time.strftime("%Y-%m-%d", time.localtime(ts)) if ts > 0 else "unknown"
 
 
 class RAGMemory:
@@ -337,6 +358,7 @@ class RAGMemory:
                         relevance_score=0.8,
                         tags=list(getattr(r, "metadata", {}).get("tags", [])),
                         metadata=getattr(r, "metadata", {}),
+                        timestamp=_epoch(getattr(r, "timestamp", 0)),
                     )
                 )
         except Exception as e:
@@ -355,12 +377,14 @@ class RAGMemory:
                         content = r.content
                         meta = getattr(r, "metadata", {}) or {}
                         entry_id = getattr(r, "id", "")
+                        stamp = _epoch(getattr(r, "timestamp", 0))
                     else:
                         # 兼容旧版本返回 dict 的情况 (已弃用，未来将移除)
                         logger.debug("Node_72 returned dict instead of KnowledgeEntry (deprecated path)")
                         content = r.get("content", r.get("text", ""))
                         meta = r.get("metadata", {})
                         entry_id = r.get("id", "")
+                        stamp = _epoch(r.get("timestamp", 0))
                     chunks.append(
                         KnowledgeChunk(
                             chunk_id=entry_id,
@@ -370,6 +394,7 @@ class RAGMemory:
                             relevance_score=meta.get("score", 0.0),
                             tags=list(meta.get("tags", [])),
                             metadata=meta,
+                            timestamp=stamp,
                         )
                     )
             except Exception as e:
@@ -401,6 +426,7 @@ class RAGMemory:
                                     relevance_score=mem.get("relevance_score", 0.5),
                                     tags=mem.get("tags", []),
                                     metadata=mem.get("metadata", {}),
+                                    timestamp=_epoch(mem.get("created_at") or mem.get("timestamp")),
                                 )
                             )
             except Exception as e:
@@ -551,7 +577,8 @@ class RAGMemory:
             header = f"[{i+1}] (source: {chunk.source}, score: {chunk.relevance_score:.2f}"
             if chunk.chunk_id:
                 header += f", id: {chunk.chunk_id}"
-            header += ")"
+            # 收进来的时间:没有它,模型分不出这是新资料还是三年前的(见 KnowledgeChunk.timestamp)
+            header += f", recorded: {_when(chunk.timestamp)})"
 
             if len(body) > limit:
                 remaining = len(body) - limit

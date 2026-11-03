@@ -64,9 +64,7 @@ class ClipMemoryProvider(MemoryProvider):
         if self._col is None:
             import chromadb
 
-            persist = os.getenv(
-                "GALAXY_CLIP_DIR", os.path.join(os.getenv("CHROMA_PERSIST_DIR", data_path("clip_memory")))
-            )
+            persist = os.getenv("GALAXY_CLIP_DIR") or os.getenv("CHROMA_PERSIST_DIR") or data_path("clip_memory")
             try:
                 os.makedirs(persist, exist_ok=True)
             except Exception:  # noqa: BLE001

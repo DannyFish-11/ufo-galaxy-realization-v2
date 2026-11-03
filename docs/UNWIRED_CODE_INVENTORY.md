@@ -253,12 +253,12 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 <!-- BEGIN GENERATED: scripts/unwired_inventory.py --write -->
 
-未接线公开能力 **383** 条，分布在 **204** 个文件。
+未接线公开能力 **384** 条，分布在 **205** 个文件。
 
 | 维度 | 数 |
 |---|---|
-| 类方法 / 模块函数 | 227 / 156 |
-| 只有测试在引用（写了、测了、没接） | 317 |
+| 类方法 / 模块函数 | 228 / 156 |
+| 只有测试在引用（写了、测了、没接） | 318 |
 | 全仓连测试都没引用 | 66 |
 | 所在模块本身从入口不可达 | 4 |
 
@@ -272,13 +272,13 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 判定谓词 | 78 | 70 | 8 |
 | 只读查询 | 54 | 48 | 6 |
 | 计算/构造 | 68 | 64 | 4 |
-| 动作/变更 | 153 | 111 | 42 |
+| 动作/变更 | 154 | 112 | 42 |
 
 ### 按用途
 
 | 用途 | 条数 | 其中只有测试引用 | 其中连测试都没有 | 文件数 |
 |---|---|---|---|---|
-| 节点服务里的方法 | 15 | 0 | 15 | 7 |
+| 节点服务里的方法 | 16 | 1 | 15 | 8 |
 | 安卓协作的契约、治理与对账层 | 81 | 76 | 5 | 39 |
 | 持久化、重启恢复与断点续跑 | 27 | 27 | 0 | 8 |
 | 指标、可观测与审计记录 | 9 | 9 | 0 | 9 |
@@ -298,18 +298,18 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 |---|---|---|
 | 接上（`wire`） | 27 | 该有人调它：写明调用点（文件、第几行附近、在做什么的时候） |
 | 挂出来（`surface`） | 0 | 该有人读它：写明挂到哪个端点 / 面板 / 诊断输出 |
-| 删掉（`delete`） | 147 | 已被别的实现取代或根本没有用途：写明被什么取代 |
+| 删掉（`delete`） | 148 | 已被别的实现取代或根本没有用途：写明被什么取代 |
 | 随对象走（`object`） | 125 | 对象上的判定 / 查询 / 扩展点：对象被用到那一处时自然会用，单独接没有意义 |
 | 测试钩子（`testhook`） | 0 | 只为测试或断言存在（复位、注入、不变量断言），不该进生产路径 |
 | 框架回调（`framework`） | 0 | 由第三方框架按名字回调（zeroconf、asyncio），清单误报 |
 | 产品决定（`product`） | 3 | 接不接是功能取舍，不是技术问题：等所有者定 |
-| 合计 | 302 | |
+| 合计 | 303 | |
 
 按用途 × 去处：
 
 | 用途 | 接上 | 挂出来 | 删掉 | 随对象走 | 测试钩子 | 框架回调 | 产品决定 | 合计 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| 节点服务里的方法 | 5 | 0 | 3 | 7 | 0 | 0 | 0 | 15 |
+| 节点服务里的方法 | 5 | 0 | 4 | 7 | 0 | 0 | 0 | 16 |
 | 持久化、重启恢复与断点续跑 | 12 | 0 | 11 | 4 | 0 | 0 | 0 | 27 |
 | 指标、可观测与审计记录 | 0 | 0 | 3 | 6 | 0 | 0 | 0 | 9 |
 | 架构治理：权威声明、边界断言与自检 | 0 | 0 | 42 | 14 | 0 | 0 | 0 | 56 |
@@ -340,7 +340,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>删掉（delete）— 147 条</summary>
+<details><summary>删掉（delete）— 148 条</summary>
 
 - `core/ai_intent.py`
   - `SemanticSearch.index_document`：SemanticSearch 整个类在生产里没人实例化（原唯一调用方是已删的 index_document_vector）；知识检索走 core/rag_memory.py → 知识库节点
@@ -509,6 +509,8 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 - `launcher/gateway.py`
   - `wait_for_gateway`：模块零导入；launcher/services.py 起网关时自己轮询
 - `nodes/Node_71_MultiDeviceCoordination/models/task.py` — `Task.update_progress`、`TaskQueue.dequeue`、`TaskQueue.is_empty`：Task.update_progress / TaskQueue.dequeue / TaskQueue.is_empty：调度器（core/task_scheduler.py）按优先级 + 依赖从 TaskQueue.snapshot() 挑任务再 remove，不走 FIFO 出队；进度在 _complete_task 直接置 1.0，调度器不追踪子任务完成数，没有要逐个更新进度的地方。有测试引用（本节点 tests/test_models.py），删除待授权
+- `nodes/Node_72_KnowledgeBase/knowledge_base_system.py`
+  - `KnowledgeBaseSystem.update_knowledge`：节点 72 的 HTTP 面走 main.py 的 KnowledgeBaseService.update_entry；这个文件的 KnowledgeBaseSystem 只有测试在用。此前唯一的「引用」是 Node_70 模板 help 里写死的字符串 update_knowledge（第 10 轮改成照实列服务上的方法后消失）。有测试引用（tests/test_core_fixes.py），删除待授权
 
 </details>
 
@@ -726,6 +728,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | `nodes/Node_116_ExternalToolWrapper/` | 1 | 1 |
 | `nodes/Node_127_BambuLab/` | 1 | 1 |
 | `nodes/Node_33_ADB/` | 1 | 1 |
+| `nodes/Node_72_KnowledgeBase/` | 1 | 1 |
 
 ### 从真实入口不可达的模块
 
@@ -739,7 +742,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 按用途分组，每个函数后面是它**自己的说明**（docstring 第一行，原文照录；没写说明的标「无说明」）。
 标记：`T` 只有测试在引用；`—` 连测试都没有。
 
-<details><summary>节点服务里的方法 — 15 条</summary>
+<details><summary>节点服务里的方法 — 16 条</summary>
 
 - `nodes/Node_116_ExternalToolWrapper/main.py`
   - `ExternalToolWrapper.register_custom_handler` — — 注册自定义处理器
@@ -763,6 +766,8 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `Task.update_progress` — — 更新进度
   - `TaskQueue.dequeue` — — 出队
   - `TaskQueue.is_empty` — — 是否为空
+- `nodes/Node_72_KnowledgeBase/knowledge_base_system.py`
+  - `KnowledgeBaseSystem.update_knowledge` T — 更新知识条目
 
 </details>
 

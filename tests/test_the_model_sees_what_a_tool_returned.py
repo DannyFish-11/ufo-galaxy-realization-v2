@@ -14,8 +14,13 @@ from core.react_progress import tool_result_text
 
 
 def test_the_result_field_is_still_what_the_model_reads():
-    assert tool_result_text({"success": True, "result": {"bpm": 72}}) == "{'bpm': 72}"
-    assert tool_result_text({"success": True, "result": "写好了", "extra": 1}) == "写好了"
+    # 字典交 JSON(不交 Python 的 repr);result 旁边还有别的键时一并交过去,不丢(core/tool_result_text.py)
+    assert json.loads(tool_result_text({"success": True, "result": {"bpm": 72}})) == {"bpm": 72}
+    assert tool_result_text({"success": True, "result": "写好了"}) == "写好了"
+    assert json.loads(tool_result_text({"success": True, "result": "写好了", "extra": 1})) == {
+        "result": "写好了",
+        "extra": 1,
+    }
 
 
 def test_a_failure_still_reads_as_its_reason():

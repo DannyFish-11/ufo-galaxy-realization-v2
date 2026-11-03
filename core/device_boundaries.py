@@ -220,7 +220,7 @@ async def permission(
     device_id: str, action: str, params: Dict[str, Any], spec: Dict[str, Any], session_id: str = ""
 ) -> Optional[Dict[str, Any]]:
     """按动作的 ``effect`` / ``needs_human`` 与自治档位判直接做、问还是高风险确认。可以做返回 None。"""
-    from core.autonomy_policy import GrantScope, autonomy_level, get_grant_store
+    from core.autonomy_policy import GrantScope, _grant_key, autonomy_level, get_grant_store
 
     effect = effect_of(spec, action)
     verdict = verdict_for(autonomy_level().value, effect, spec.get("needs_human") is True)
@@ -237,16 +237,18 @@ async def permission(
         return None if outcome.approved else {"success": False, "error": f"没有执行:{outcome.reason}"}
 
     node = f"device:{device_id}"
-    if get_grant_store().consume_or_check(node, action):
+    # 与工具门、节点门同一个授权键与同一套档位(once 用掉就没了;session 绑这一段对话)
+    if get_grant_store().check_key(_grant_key(node, action), session_id=session_id or ""):
         return None
     from core.device_onboarding.conversation import is_pending
 
     if is_pending(what, session_id):
         return _in_conversation(what, session_id)
     try:
-        from core.device_declarations import online_devices_that
+        # 问谁:与批准门同一条规则(core/approvers.py —— 设备自己的声明,没声明的已知会答的旧客户端)
+        from core.interaction.pending_decision_registry import discover_answering_devices
 
-        targets = await online_devices_that("answers_decisions")
+        targets = await discover_answering_devices()
     except Exception:  # noqa: BLE001 — 探不到能问的设备就在对话里问
         targets = []
     if not targets:
@@ -258,7 +260,9 @@ async def permission(
     if not scope:
         return {"success": False, "error": f"没有执行:没有在设备上批准{what}"}
     if scope != "once":
-        get_grant_store().grant(node, action, GrantScope(scope), operator="device_decision")
+        get_grant_store().grant(
+            node, action, GrantScope(scope), operator="device_decision", session_id=session_id or ""
+        )
     logger.info("[AUDIT] 设备动作经人批准 | %s | %s", what, scope)
     return None
 

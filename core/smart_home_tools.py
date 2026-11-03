@@ -18,19 +18,19 @@
 执行一律走统一执行器 ``invoke_node("Node_27_SmartHome", …)``,不绕开任何一道门:
 权限白名单、自治档位审批都照常生效。
 
-审批不能卡死在面板上
-====================
-默认的自治档位(guided)下,Node_27 的"写"动作要人点头。原来的形态是排进审批
-队列、等人去面板上批 —— 可你是在外面对着手表说的话,面板不在手边。所以这里
-被要求审批时,**直接在手表上问你**(与高风险工具同一条 HITL 通路,fail-closed:
-只有明确点了"批准"才算),批了就只授权这一次,再执行。
+审批:从哪说的就在哪批
+======================
+默认的自治档位(guided)下,Node_27 的"写"动作要人点头。问人只经 :mod:`core.approval_gate`
+一个口:对着手表说的,在手表上问;在电脑上说的,在电脑面板上问(fail-closed:只有明确点了
+"批准"才算)。批一次记「同一个动作 + 同一个设备」到这段对话结束 —— 开灯批过,再开不再问;
+关灯是另一个动作,照样问。这里只给那一问配一句人话(「打开 客厅灯」)。
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger("Galaxy.SmartHomeTools")
 
@@ -177,28 +177,12 @@ async def _resolve_entity(device: str) -> Dict[str, Any]:
     }
 
 
-async def _approve_on_watch(node_action: str, what: str, error: str, session_id: str) -> Optional[str]:
-    """执行器要求审批时,在手表上问一次。批准返回 None;否则返回不执行的理由。"""
-    if not error.startswith("approval_required"):
-        return error
-    from core.interaction.high_risk_confirmation import confirm_high_risk_tool
+async def _invoke_asking(action: str, params: Dict[str, Any], what: str) -> Dict[str, Any]:
+    """调 Node_27;要批的话节点门当场问人,问的那一句是 ``what``。"""
+    from core.approval_gate import interactive, label
 
-    outcome = await confirm_high_risk_tool(tool_name=what, risk_level="写操作", session_id=session_id)
-    if not outcome.approved:
-        return f"没有执行:{outcome.reason}"
-    # 与面板审批同一套落账(core/routes/approvals.py):ack 掉排队中的请求,授权**仅此一次**。
-    try:
-        from core.autonomy_policy import GrantScope, get_grant_store
-        from core.control_plane._globals import get_approval_registry
-
-        registry = get_approval_registry()
-        for req in registry.list_pending():
-            if req.action == f"{NODE_ID}.{node_action}":
-                registry.ack(req.request_id, req.ack_token, operator=f"watch:{outcome.decision_id}")
-        get_grant_store().grant(NODE_ID, node_action, GrantScope.ONCE, operator=f"watch:{outcome.decision_id}")
-    except Exception as exc:  # noqa: BLE001
-        return f"已批准,但授权没记上({exc}),没有执行"
-    return None
+    with interactive(), label(what):
+        return _unwrap(await _invoke(action, params))
 
 
 async def dispatch_home_tool(action: str, arguments: Dict[str, Any], *, session_id: str = "") -> Dict[str, Any]:
@@ -223,13 +207,7 @@ async def dispatch_home_tool(action: str, arguments: Dict[str, Any], *, session_
         scene = str(args.get("scene") or "").strip()
         if not scene:
             return {"success": False, "error": "home__scene 需要 scene"}
-        out = _unwrap(await _invoke("scene", {"scene_id": scene}))
-        if not out["success"]:
-            why = await _approve_on_watch("scene", f"启动场景 {scene}", out["error"], session_id)
-            if why is not None:
-                return {"success": False, "error": why}
-            out = _unwrap(await _invoke("scene", {"scene_id": scene}))
-        return out
+        return await _invoke_asking("scene", {"scene_id": scene}, f"启动场景 {scene}")
 
     if action == "control":
         act = str(args.get("action") or "").strip()
@@ -239,13 +217,7 @@ async def dispatch_home_tool(action: str, arguments: Dict[str, Any], *, session_
         if not target["success"]:
             return target
         params = {"device_id": target["entity_id"], "action": act, "params": dict(args.get("params") or {})}
-        out = _unwrap(await _invoke("control", params))
-        if not out["success"]:
-            what = f"{_ACTION_WORDS[act]} {target['name']}"
-            why = await _approve_on_watch("control", what, out["error"], session_id)
-            if why is not None:
-                return {"success": False, "error": why}
-            out = _unwrap(await _invoke("control", params))
+        out = await _invoke_asking("control", params, f"{_ACTION_WORDS[act]} {target['name']}")
         if out["success"]:
             out["entity_id"] = target["entity_id"]
         return out

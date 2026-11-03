@@ -1,0 +1,15 @@
+name: 释放 runner 磁盘
+description: >-
+  装 requirements.txt 之前先删掉这些作业用不上的预装工具链(安卓 SDK、.NET、GHC、CodeQL 包,共十几 GB)。
+  sentence-transformers 拉进来的 torch 带好几 GB 的 nvidia-* 依赖,加上 pip 缓存,runner 的磁盘曾被装满
+  (No space left on device,测试一条都没跑就红;2026-11-02 一天四次,散在不同作业)。
+  只删、不改装什么,依赖解析与测试内容不变。
+runs:
+  using: composite
+  steps:
+    - name: 删掉用不上的预装工具链
+      shell: bash
+      run: |
+        echo "删之前:$(df -h / | tail -1)"
+        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+        echo "删之后:$(df -h / | tail -1)"

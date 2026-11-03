@@ -24,6 +24,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from core.anticipatory_context import strip_appended_annotations
+
 logger = logging.getLogger("Galaxy.Agent.IntentRouter")
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -267,12 +269,24 @@ _CHAT_KW: List[str] = [
 ]
 
 
+def _has_chat_word(msg: str, kw: str) -> bool:
+    """聊天词命中:英文词按整词认(「hi」不认「this」「think」「high」「machine」),中文照旧按子串。"""
+    if kw.isascii():
+        return re.search(r"(?<![a-z0-9])" + re.escape(kw.strip()) + r"(?![a-z0-9])", msg) is not None
+    return kw in msg
+
+
 def _classify_by_rules(message: str) -> IntentResult:
-    """基于关键词规则快速分类意图。"""
-    msg = message.lower().strip()
+    """基于关键词规则快速分类意图。只看用户说的话:机器追加在末尾的注解先剥掉。
+
+    第 12 轮真跑:同一句「用节点删文件:…」第一次判成任务,第二次判成聊天 —— 末尾追加的
+    ``[desktop_context_strategy execution_readiness=high; …]`` 里的 ``high`` 含「hi」,命中了聊天词;
+    模型拿不到工具,那件事就没做。
+    """
+    msg = strip_appended_annotations(message or "").lower().strip()
 
     high_hit = any(kw in msg for kw in _TASK_KW_HIGH)
-    chat_hit = any(kw in msg for kw in _CHAT_KW)
+    chat_hit = any(_has_chat_word(msg, kw) for kw in _CHAT_KW)
 
     # 缓存第一个命中的任务关键词（避免重复遍历）
     task_kw = next((kw for kw in _TASK_KW_HIGH if kw in msg), "").strip()
@@ -330,7 +344,9 @@ def _classify_by_rules(message: str) -> IntentResult:
             raw_intent="task_execute",
             method="rules",
         )
-    return IntentResult(mode=IntentMode.CHAT_ONLY, confidence=0.7, method="rules")
+    # 4~9 个字、没有任何信号:规则说不准(「用节点查时间」「客厅灯亮一点」都只有六个字),交给模型复核(低于复核线);
+    # 没有模型时仍按聊天。以前末尾总挂着机器注解、消息从不短于 10 个字,这一档实际上一直是模型在判 —— 剥掉注解后照旧。
+    return IntentResult(mode=IntentMode.CHAT_ONLY, confidence=0.55, method="rules")
 
 
 # ──────────────────────────────────────────────────────────────────────────────

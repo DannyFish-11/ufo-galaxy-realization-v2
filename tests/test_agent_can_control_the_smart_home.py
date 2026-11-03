@@ -141,8 +141,8 @@ def test_openclawd_offers_the_tools_and_routes_the_prefix():
     assert "if home_tools_enabled():" in collect and "tools.extend(HOME_BUILTIN_TOOLS)" in collect
     dispatch = inspect.getsource(OpenClawd._dispatch_tool_call)
     # 必须走内联:CanonicalDispatcher 不认 home__ 前缀,委派过去就是"未知工具前缀"。
-    # devices__ / tuning__ / home__ 三族同形，合在一个分支里（按前缀查表），所以认「前缀登记了 + 表里有它」。
-    assert '"home__",' in dispatch and '"home__")' in dispatch and "dispatch_home_tool" in dispatch
+    # devices__ / tuning__ / home__ / nodes__ 四族同形，合在一个分支里（按前缀查表），所以认「前缀登记了 + 表里有它」。
+    assert '"home__",' in dispatch and '"home": dispatch_home_tool' in dispatch
 
 
 # ── 整条链路 ──────────────────────────────────────────────────────────────
@@ -167,7 +167,8 @@ def test_turning_on_a_light_by_name_reaches_home_assistant_after_watch_approval(
     assert len(asked) == 1 and "客厅灯" in asked[0]["tool_name"]
 
 
-def test_the_approval_is_for_this_one_time_only(ha, monkeypatch):
+def test_turning_it_off_is_a_different_action_and_is_asked_again(ha, monkeypatch):
+    """批一次记「同一个动作 + 同一个设备」(所有者的决定) —— 开灯批过,关灯是另一个动作。"""
     asked = []
     _approve_on_watch(monkeypatch, True, asked)
     _agent_call("home__control", {"device": "light.living_room", "action": "on"})
@@ -177,6 +178,18 @@ def test_the_approval_is_for_this_one_time_only(ha, monkeypatch):
         "/api/services/homeassistant/turn_on",
         "/api/services/homeassistant/turn_off",
     ]
+
+
+def test_the_same_action_on_the_same_device_is_asked_once(ha, monkeypatch):
+    """批过「打开 客厅灯」,这段对话里再开它不再问;换一盏灯照样问。"""
+    asked = []
+    _approve_on_watch(monkeypatch, True, asked)
+    _agent_call("home__control", {"device": "light.living_room", "action": "on"})
+    _agent_call("home__control", {"device": "light.living_room", "action": "on"})
+    assert len(asked) == 1
+    _agent_call("home__control", {"device": "light.bedroom", "action": "on"})
+    assert len(asked) == 2
+    assert len(ha.posts()) == 3
 
 
 def test_denied_on_the_watch_means_nothing_is_sent(ha, monkeypatch):

@@ -12,10 +12,10 @@ Validates that:
 - The gateway websocket module docstring declares /ws/device/{device_id} as
   [CANONICAL] and all other device paths as non-canonical.
 - The /ws/device/{device_id} route docstring is clearly canonical.
-- The /ws/android/{device_id} route is demoted to [COMPAT].
+- The /ws/android/{device_id} and /ws/android routes are [RETIRED] (2026-11-02; no client ever used them).
 - The /ws/{device_id} route is marked [DEPRECATED].
 - The /ws route is marked [DEBUG].
-- The /ws/ufo3/{device_id} route retains [LEGACY-DISABLED] / disabled status.
+- The /ws/ufo3/{device_id} route is [RETIRED] together with its GALAXY_ENABLE_LEGACY_PROTOCOLS guard.
 - core/api_routes.py /ws/device/{device_id} is explicitly marked as
   compatibility-only (non-canonical, non-primary).
 - core/api_routes.py module docstring notes that canonical ingress is in gateway.
@@ -35,14 +35,14 @@ Test index:
   6.  CANONICAL_DEVICE_INGRESS_AUTHORITY does not claim READINESS authority.
   7.  gateway websocket module docstring contains CANONICAL_DEVICE_INGRESS_AUTHORITY section.
   8.  gateway websocket module docstring marks /ws/device/{device_id} as [CANONICAL].
-  9.  gateway websocket module docstring marks /ws/android/{device_id} as [COMPAT].
+  9.  gateway websocket module docstring marks /ws/android/{device_id} as [RETIRED].
   10. gateway websocket module docstring marks /ws/{device_id} as [DEPRECATED].
   11. gateway websocket module docstring marks /ws as [DEBUG].
-  12. gateway websocket module docstring marks /ws/ufo3/{device_id} as [LEGACY-DISABLED].
+  12. gateway websocket module docstring marks /ws/ufo3/{device_id} as [RETIRED].
   13. /ws/device/{device_id} route docstring contains 'canonical' (case-insensitive).
   14. /ws/device/{device_id} route docstring contains 'CANONICAL'.
-  15. /ws/android/{device_id} route docstring contains 'COMPAT'.
-  16. /ws/android/{device_id} route docstring states it is NOT the canonical ingress.
+  15. no /ws/android/{device_id} route function is defined any more.
+  16. no /ws/android route of any shape is mounted.
   17. /ws/{device_id} route docstring contains 'DEPRECATED'.
   18. /ws/{device_id} route docstring states new clients must use /ws/device/.
   19. /ws route docstring contains 'DEBUG'.
@@ -53,7 +53,7 @@ Test index:
   24. core create_websocket_routes docstring states NOT the canonical device ingress.
   25. core device_websocket handler docstring contains '[COMPAT]'.
   26. core device_websocket handler docstring references galaxy_gateway as canonical.
-  27. /ws/ufo3 disabled behavior is preserved in gateway source (legacy guard present).
+  27. /ws/ufo3 is gone together with its legacy guard (nothing left to switch on).
   28. gateway websocket source does not present /ws/android as canonical ingress.
   29. gateway websocket source does not present /ws as canonical ingress.
   30. gateway websocket source does not present /ws/{device_id} as canonical ingress.
@@ -170,12 +170,11 @@ def test_08_module_docstring_marks_ws_device_as_canonical():
     assert re.search(r"\[CANONICAL\].*ws/device|ws/device.*\[CANONICAL\]", _GW_WS)
 
 
-def test_09_module_docstring_marks_android_as_compat():
-    """Gateway websocket module docstring marks /ws/android/{device_id} as [COMPAT]."""
-    assert "[COMPAT]" in _GW_WS
+def test_09_module_docstring_marks_android_as_retired():
+    """Gateway websocket module docstring marks /ws/android/{device_id} as [RETIRED] (2026-11-02)."""
     import re
 
-    assert re.search(r"\[COMPAT\].*ws/android|ws/android.*\[COMPAT\]", _GW_WS)
+    assert re.search(r"ws/android/\{device_id\}\s+\[RETIRED\]", _GW_WS)
 
 
 def test_10_module_docstring_marks_generic_as_deprecated():
@@ -188,9 +187,11 @@ def test_11_module_docstring_marks_ws_root_as_debug():
     assert "[DEBUG]" in _GW_WS
 
 
-def test_12_module_docstring_marks_ufo3_as_legacy_disabled():
-    """Gateway websocket module docstring marks /ws/ufo3/{device_id} as [LEGACY-DISABLED]."""
-    assert "[LEGACY-DISABLED]" in _GW_WS
+def test_12_module_docstring_marks_ufo3_as_retired():
+    """Gateway websocket module docstring marks /ws/ufo3/{device_id} as [RETIRED] (2026-11-02)."""
+    import re
+
+    assert re.search(r"ws/ufo3/\{device_id\}\s+\[RETIRED\]", _GW_WS)
 
 
 # ---------------------------------------------------------------------------
@@ -215,26 +216,14 @@ def test_14_ws_device_route_docstring_contains_canonical_tag():
     assert "[CANONICAL]" in docstring, f"[CANONICAL] not in websocket_device docstring: {docstring!r}"
 
 
-def test_15_android_route_docstring_contains_compat_tag():
-    """gateway /ws/android/{device_id} route docstring contains [COMPAT] tag."""
-    import re
-
-    match = re.search(r'async def websocket_android_primary.*?"""(.*?)"""', _GW_WS, re.DOTALL)
-    assert match, "websocket_android_primary function with docstring not found"
-    docstring = match.group(1)
-    assert "[COMPAT]" in docstring, f"[COMPAT] not in websocket_android_primary docstring: {docstring!r}"
+def test_15_no_android_route_function_is_defined():
+    """The retired /ws/android/{device_id} route function is gone (was websocket_android_primary)."""
+    assert "async def websocket_android_primary" not in _GW_WS
 
 
-def test_16_android_route_docstring_states_not_canonical():
-    """gateway /ws/android/{device_id} route docstring states it is NOT the canonical ingress."""
-    import re
-
-    match = re.search(r'async def websocket_android_primary.*?"""(.*?)"""', _GW_WS, re.DOTALL)
-    assert match
-    docstring = match.group(1)
-    assert (
-        "NOT" in docstring or "not" in docstring.lower()
-    ), "websocket_android_primary docstring should state it is not canonical"
+def test_16_no_android_route_is_mounted():
+    """No /ws/android route of any shape is mounted in the gateway source."""
+    assert '@app.websocket("/ws/android' not in _GW_WS
 
 
 # 收敛后契约:/ws/{device_id}(DEPRECATED)与 /ws(DEBUG)入口面已被移除,
@@ -347,10 +336,10 @@ def test_26_core_device_websocket_references_gateway_canonical():
 # ---------------------------------------------------------------------------
 
 
-def test_27_ufo3_disabled_guard_preserved():
-    """gateway websocket source preserves legacy guard for /ws/ufo3 (disabled by default)."""
-    assert "_LEGACY_PROTOCOLS_ENABLED" in _GW_WS
-    assert "GALAXY_ENABLE_LEGACY_PROTOCOLS" in _GW_WS
+def test_27_ufo3_is_gone_with_its_guard():
+    """/ws/ufo3 is retired: no route, and its GALAXY_ENABLE_LEGACY_PROTOCOLS guard went with it."""
+    assert '@app.websocket("/ws/ufo3' not in _GW_WS
+    assert "_LEGACY_PROTOCOLS_ENABLED" not in _GW_WS
 
 
 def test_28_android_path_not_presented_as_canonical_in_gateway():

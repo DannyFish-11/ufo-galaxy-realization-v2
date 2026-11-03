@@ -185,6 +185,15 @@ class BaseUIAutomator(ABC):
 # ============================================================================
 
 
+def _import_pyautogui() -> Optional[Exception]:
+    """在工作线程里 import pyautogui;成功返回 None,失败把异常交回来(三种状态由调用方分开说)。"""
+    try:
+        import pyautogui  # noqa: F401
+    except Exception as exc:  # noqa: BLE001 — KeyError("DISPLAY") 之类也要原样交回
+        return exc
+    return None
+
+
 class MicrosoftUFOAutomator(BaseUIAutomator):
     """旧接口:动作交给桌面自动化整体(微软 UFO 是其中控件级的一个后端)。"""
 
@@ -224,13 +233,13 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
         本该"可选功能不可用"的事变成异常上抛。更早的日志还会把第 2 种说成
         "pyautogui 未安装",而它明明装着 —— 说的和现实相反。
         """
-        try:
-            import pyautogui  # noqa: F401
-        except ImportError:
+        # import 期就去连 X11 / 装钩子,真跑实测要好几秒 —— 不在事件循环里做(曾卡住循环 6.9 秒)
+        exc = await asyncio.to_thread(_import_pyautogui)
+        if isinstance(exc, ImportError):
             # 可选依赖缺失属正常(非致命),降为 warning,别让新克隆启动刷红。
             logger.warning("pyautogui 没装,GUI 自动化回退用不了(可选功能,不影响启动)。装法: pip install pyautogui")
             return False
-        except Exception as exc:  # noqa: BLE001
+        if exc is not None:
             # 装了,但这台机器上用不起来(最常见:无头/没有 X11 DISPLAY)。
             # 照实说是哪一种,不要说成"没装"。
             _headless = isinstance(exc, KeyError) and "DISPLAY" in str(exc)

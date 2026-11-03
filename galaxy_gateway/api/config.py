@@ -20,7 +20,8 @@ ws_paths : list[str]
     Ordered list of WebSocket paths the client should try, from most
     preferred to least.  Replace the ``{id}`` placeholder with the actual
     device identifier at connection time.
-    Example: ``["/ws/device/{id}", "/ws/android/{id}", "/ws/android"]``
+    Example: ``["/ws/device/{id}"]``.
+    The old ``/ws/android`` paths were retired on 2026-11-02.
 
 webrtc_gateway_ws_path : str
     WebSocket path for WebRTC signaling through the gateway.
@@ -90,11 +91,10 @@ _DEFAULT_STUN = "stun:stun.l.google.com:19302"
 _DEFAULT_TRANSPORT_PRIORITY = ["tailscale", "intranet", "internet"]
 
 _WS_CANONICAL_PATH = "/ws/device/{id}"
-_WS_COMPAT_PATHS = [
-    "/ws/android/{id}",
-    "/ws/android",
-]
-_WS_PATHS = [_WS_CANONICAL_PATH, *_WS_COMPAT_PATHS]
+#: 旧的 /ws/android/{id}、/ws/android 已于 2026-11-02 退役(两个 App 的全部历史里都没连过);
+#: 键留着、给空表,按旧字段解析的客户端不会因为少一个键出错。
+_WS_COMPAT_PATHS: List[str] = []
+_WS_PATHS = [_WS_CANONICAL_PATH]
 _WEBRTC_GW_PATH = "/ws/webrtc/{id}"
 
 

@@ -28,6 +28,14 @@ from typing import Any, Callable, Dict, Iterator, Optional
 
 logger = logging.getLogger("Galaxy.LLMStream")
 
+#: 句子在这些字上结束(核对线切句用同一份,``core/live_check.py``)。
+SENTENCE_END = "。！？!?；;\n"
+#: 句末之后仍算在这句里的收尾符(空白、引号、括号):「好了。」后面跟着的 」 不让句界失效。
+_CLOSERS = " \t　\"'”’」』）)】]"
+#: 核对线请生成收住,要等到下一个句界(docs/GROUNDED_AGENT_DESIGN.md §3.3「下一个句界打断」);
+#: 模型迟迟不出句界时,请求之后最多再放这么多字就收(第 12 轮真跑:每段一出就停,更正接在半句话后面 ——「要我更正一下」)。
+STOP_GRACE_CHARS = 80
+
 # ── 进程级活跃流登记 ────────────────────────────────────────────────────────
 # contextvars 只在**本请求链路内**可见,外部（可观测面/流式主干状态）拿不到
 # "现在有几路真的在流"。这里补一个进程级计数:use_stream 进出即增减,异常路径
@@ -81,6 +89,32 @@ class TokenStream:
         self.chars = 0  # 本段(自上次 reset 起)已流出的字符数
         self.total_chars = 0
         self.resets = 0
+        # 边说边改(core/live_check.py):核对线在生成中途核出一句不对时请求停下;适配器每流出一段就看一眼,
+        # 看到了就收住这一次生成。``stop_note`` 是要带给模型接着说的那句核对结论。
+        self.stop_requested = False
+        self.stop_note = ""
+        #: 停下之前已经说出去的那几段(接着说的那一次只生成后半截,最终回答 = 前面这些 + 后半截)
+        self.prefix = ""
+        #: 已流出的话此刻是不是停在句界上(还没流出任何字也算)
+        self.at_boundary = True
+        self._stop_mark = 0
+
+    def request_stop(self, note: str) -> None:
+        """请求在下一个句界收住这一次生成(只记一次:同一轮里第一条结论说了算)。"""
+        if not self.stop_requested:
+            self.stop_requested = True
+            self.stop_note = note
+            self._stop_mark = self.total_chars
+
+    def ready_to_stop(self) -> bool:
+        """该收住了:请求过,且已流出的话停在句界上(或请求之后又流出了 :data:`STOP_GRACE_CHARS` 个字还没到句界)。
+
+        适配器在每段**流出之前**和**流出之后**各看一眼:之前看 —— 已经停在句界上,这一段就不再流出;
+        之后看 —— 这一段刚好把句子说完。半句话不收,更正不会接在半句话后面。
+        """
+        if not self.stop_requested:
+            return False
+        return self.at_boundary or self.total_chars - self._stop_mark >= STOP_GRACE_CHARS
 
     def feed(self, text: str) -> None:
         """流出一段新文本。空串跳过;回调异常吞掉(不反噬生成主流程)。"""
@@ -92,12 +126,20 @@ class TokenStream:
             logger.debug("TokenStream.on_delta 回调失败(忽略): %s", exc)
         self.chars += len(text)
         self.total_chars += len(text)
+        body = text.rstrip(_CLOSERS)
+        if body:  # 只有空白的一段不改变句界
+            self.at_boundary = body[-1] in SENTENCE_END
 
     def reset(self) -> None:
         """作废本段已流出的内容(消费端应清空对应展示/朗读队列)。"""
         self.resets += 1
         had = self.chars
         self.chars = 0
+        # 作废了的话里驳倒的那一句也一起作废:不再为它收住,也不把它当作「前面已经说出去的」
+        self.stop_requested = False
+        self.stop_note = ""
+        self.prefix = ""
+        self.at_boundary = True
         if self._on_reset is None:
             return
         try:

@@ -370,6 +370,7 @@
     "udm_write_upsert",
     "unavailable_entries",
     "update_experience_outcome",
+    "update_knowledge",
     "update_progress",
     "update_quality",
     "update_with_dispatch_result",

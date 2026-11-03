@@ -9,8 +9,9 @@ Covers all requirements from the AIP v3 / Android client runtime alignment:
 1. Protocol SSOT — aip_v3.py MessageType is the canonical source;
    android_bridge imports from it (not a local copy).
 2. AIP v3 serialization — key message types round-trip correctly.
-3. Android WebSocket routing — /ws/android/{device_id} and /ws/android
-   route messages through android_bridge (not the generic WebSocketManager).
+3. Android WebSocket routing — /ws/device/{device_id} routes messages through
+   android_bridge (not the generic WebSocketManager); the retired /ws/android
+   paths are refused.
 4. Device registration — ack returned; structured error on failure.
 5. Heartbeat handling — ack returned for registered and unregistered devices.
 6. Task lifecycle — task_submit → task_assign → task_progress →
@@ -192,8 +193,11 @@ class TestAIPv3Serialization:
 
 class TestAndroidWSRouting:
     """
-    /ws/android/{device_id} and /ws/android must route through android_bridge.
-    Test using the gateway FastAPI app TestClient.
+    The device ingress (/ws/device/{device_id}) routes through android_bridge.
+    Test using the gateway FastAPI app TestClient. These tests used to go through
+    /ws/android/{device_id} and /ws/android; those were retired on 2026-11-02, so the
+    same handler behaviour is now checked on the one device ingress, and the old paths
+    are checked to be refused.
     """
 
     @pytest.fixture(scope="class")
@@ -226,62 +230,56 @@ class TestAndroidWSRouting:
 
         return {"register": reg_resp, "heartbeat": hb_resp, "device_id": device_id}
 
-    def test_android_primary_path_returns_register_ack(self, gw_client):
-        """/ws/android/{device_id} returns device_register_ack."""
-        r = self._register_and_heartbeat(gw_client, "/ws/android/{device_id}")
+    def test_device_path_returns_register_ack(self, gw_client):
+        """/ws/device/{device_id} returns device_register_ack."""
+        r = self._register_and_heartbeat(gw_client, "/ws/device/{device_id}")
         assert r["register"]["type"] == "device_register_ack"
         assert r["register"]["success"] is True
 
-    def test_android_primary_path_returns_heartbeat_ack(self, gw_client):
-        """/ws/android/{device_id} returns heartbeat_ack."""
-        r = self._register_and_heartbeat(gw_client, "/ws/android/{device_id}")
+    def test_device_path_returns_heartbeat_ack(self, gw_client):
+        """/ws/device/{device_id} returns heartbeat_ack."""
+        r = self._register_and_heartbeat(gw_client, "/ws/device/{device_id}")
         assert r["heartbeat"]["type"] == "heartbeat_ack"
 
-    def test_android_fallback_path_returns_register_ack(self, gw_client):
-        """/ws/android?device_id=... returns device_register_ack."""
+    def test_device_path_first_frame_returns_register_ack(self, gw_client):
+        """/ws/device/{device_id} (first frame) returns device_register_ack."""
         device_id = f"fb-{uuid.uuid4().hex[:8]}"
-        with gw_client.websocket_connect(f"/ws/android?device_id={device_id}") as ws:
+        with gw_client.websocket_connect(f"/ws/device/{device_id}") as ws:
             ws.send_text(json.dumps(_msg("device_register", device_id, platform="android")))
             resp = ws.receive_json()
         assert resp["type"] == "device_register_ack"
         assert resp["success"] is True
 
-    def test_android_fallback_path_heartbeat_ack(self, gw_client):
-        """/ws/android?device_id=... returns heartbeat_ack."""
+    def test_device_path_first_frame_heartbeat_ack(self, gw_client):
+        """/ws/device/{device_id} (first frame) returns heartbeat_ack."""
         device_id = f"fb2-{uuid.uuid4().hex[:8]}"
-        with gw_client.websocket_connect(f"/ws/android?device_id={device_id}") as ws:
+        with gw_client.websocket_connect(f"/ws/device/{device_id}") as ws:
             ws.send_text(json.dumps(_msg("heartbeat", device_id)))
             resp = ws.receive_json()
         assert resp["type"] == "heartbeat_ack"
 
-    def test_android_auto_device_id_heartbeat_ack(self, gw_client):
-        """/ws/android without device_id returns heartbeat_ack."""
-        with gw_client.websocket_connect("/ws/android") as ws:
-            ws.send_text(
-                json.dumps(
-                    {
-                        "version": "3.0",
-                        "type": "heartbeat",
-                        "device_id": "auto-dev",
-                    }
-                )
-            )
-            resp = ws.receive_json()
-        assert resp["type"] == "heartbeat_ack"
+    @pytest.mark.parametrize("path", ["/ws/android", "/ws/android/x-1", "/ws/android?device_id=x-1", "/ws/ufo3/x-1"])
+    def test_retired_android_paths_are_refused(self, gw_client, path):
+        """旧入口 2026-11-02 退役:真网关上握手即被拒(原先这里测 /ws/android 不带设备号也回心跳确认)。"""
+        from starlette.websockets import WebSocketDisconnect
 
-    def test_android_path_rejects_unknown_type(self, gw_client):
-        """/ws/android/{device_id} returns error for unknown message type."""
+        with pytest.raises(WebSocketDisconnect):
+            with gw_client.websocket_connect(path):
+                pass
+
+    def test_device_path_rejects_unknown_type(self, gw_client):
+        """/ws/device/{device_id} returns error for unknown message type."""
         device_id = f"err-{uuid.uuid4().hex[:8]}"
-        with gw_client.websocket_connect(f"/ws/android/{device_id}") as ws:
+        with gw_client.websocket_connect(f"/ws/device/{device_id}") as ws:
             ws.send_text(json.dumps(_msg("not_a_real_type", device_id)))
             resp = ws.receive_json()
         assert resp["type"] == "error"
         assert resp.get("error_code") == "UNKNOWN_MESSAGE_TYPE"
 
-    def test_android_path_rejects_missing_device_id(self, gw_client):
-        """/ws/android/{device_id} returns error when device_id absent from payload."""
+    def test_device_path_rejects_missing_device_id(self, gw_client):
+        """/ws/device/{device_id} returns error when device_id absent from payload."""
         device_id = f"noid-{uuid.uuid4().hex[:8]}"
-        with gw_client.websocket_connect(f"/ws/android/{device_id}") as ws:
+        with gw_client.websocket_connect(f"/ws/device/{device_id}") as ws:
             ws.send_text(
                 json.dumps(
                     {

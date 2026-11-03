@@ -417,29 +417,22 @@ class HealthMonitor:
                 logger.error("RESTART %s 执行异常(非模拟路径的真实失败): %s", node_id, exc)
                 return False
 
-        elif action == RecoveryAction.CLEAR_CACHE:
-            await asyncio.sleep(0.2)
-            return random.random() > 0.2  # 80% success rate
-        
-        elif action == RecoveryAction.THROTTLE:
-            await asyncio.sleep(0.1)
-            return True  # Always succeeds
-        
-        elif action == RecoveryAction.FORCE_RELEASE:
-            await asyncio.sleep(0.3)
-            return random.random() > 0.4  # 60% success rate
-        
-        elif action == RecoveryAction.RESET_USB:
-            await asyncio.sleep(1.0)
-            return random.random() > 0.5  # 50% success rate
-        
-        elif action == RecoveryAction.COLD_REBOOT:
-            await asyncio.sleep(2.0)
-            return random.random() > 0.6  # 40% success rate
-        
-        else:
-            await asyncio.sleep(0.5)
-            return random.random() > 0.3
+        # 其余恢复动作没有真实实现:照实「没做成」。此前它们 sleep 一下再掷骰子(清缓存 80% 成功、限流永远成功……),
+        # 自愈记录里写着「恢复成功」,其实什么都没做(第 9 轮)。只有显式打开模拟驱动才模拟(nodes/common/mock_drivers.py)。
+        from nodes.common.mock_drivers import mock_drivers_enabled
+
+        if not mock_drivers_enabled():
+            logger.warning("恢复动作 %s 没有真实实现,没有执行(%s)", action.value, node_id)
+            return False
+        simulated_rate = {
+            RecoveryAction.CLEAR_CACHE: 0.8,
+            RecoveryAction.THROTTLE: 1.0,
+            RecoveryAction.FORCE_RELEASE: 0.6,
+            RecoveryAction.RESET_USB: 0.5,
+            RecoveryAction.COLD_REBOOT: 0.4,
+        }.get(action, 0.7)
+        await asyncio.sleep(0.1)
+        return random.random() < simulated_rate
     
     async def enter_degraded_mode(self):
         """Enter system-wide degraded mode."""

@@ -467,6 +467,20 @@ async def mcp_call(request: Dict[str, Any]):
 # ---------------------------------------------------------------------------
 
 
+def actions() -> Dict[str, Any]:
+    """统一入口 :func:`process` 认的动作(模型的节点目录 nodes__list 照这个列)。"""
+    from nodes.common.service_entry import model_params, param
+
+    return {
+        "call": {
+            "summary": "让模型从登记过的工具里挑一个并执行(prompt 必填,tools 可限定范围)",
+            "params": [param("prompt", required=True), param("tools", "List[str]")],
+        },
+        "list_tools": {"summary": "列出登记过的工具", "params": []},
+        "register_tool": {"summary": "登记一个工具(调用时打 handler_url)", "params": model_params(RegisterToolRequest)},
+    }
+
+
 async def process(command: str = "call", **params: Any) -> Dict[str, Any]:
     """统一进程内入口 — 供 fusion_entry / node_invocation 直调用。
 

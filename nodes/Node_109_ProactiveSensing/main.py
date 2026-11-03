@@ -238,7 +238,13 @@ class ProactiveSensingEngine:
         except ImportError:
             pass
         
-        # 模拟数据
+        # 读不到(没装 psutil):照实是「不知道」—— 值为 None、置信度 0,与本文件别处的约定一致。
+        # 此前这里回 10~80 之间的随机数、置信度 0.8,规则引擎和智能体拿它当真负载(第 9 轮)。
+        # 只有显式打开模拟驱动(nodes/common/mock_drivers.py)才模拟。
+        from nodes.common.mock_drivers import mock_drivers_enabled
+
+        if not mock_drivers_enabled():
+            return (None, "%", 0.0)
         import random
         if sensor.sensor_id == "sys_cpu":
             return (random.uniform(10, 80), "%", 0.8)

@@ -1,0 +1,13 @@
+{
+  "base": "default",
+  "components": [
+    {
+      "id": "instructions",
+      "source": "./components/instructions.json"
+    }
+  ],
+  "genome_id": "galaxy:grounded",
+  "genome_schema_version": "1",
+  "parent_id": "genome:13c80a8846f1683a",
+  "version": 1
+}

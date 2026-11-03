@@ -1,46 +1,47 @@
-"""core/loop_local_lock.py — 给进程单例用的 ``async with`` 锁:每个事件循环各一把 asyncio.Lock。
+"""每个事件循环一把 ``asyncio.Lock`` —— 给进程级单例用的锁。
 
-单独一把 ``asyncio.Lock`` 第一次有人排队时就绑死在当时的事件循环上,之后在别的循环里一排队就
-``RuntimeError: ... is bound to a different event loop``。那个循环要是在有人排队时没了(任务被丢下、没取消),
-等待者永远挂在锁上,此后**每一次**拿锁都走排队那条路、都报这个错。
+为什么不能整个进程一把 ``asyncio.Lock``
+--------------------------------------
+``asyncio.Lock`` 在第一次有人排队时绑定到那个循环。进程里不止一个循环(节点宿主线程、设备那一轮的
+后台循环、测试各自的循环):
 
-会话管理器就是这样坏的:它是进程单例,却不止被一个循环用到 —— 网关主循环之外,没有运行中循环的同步调用方会
-``asyncio.run`` 一个临时循环记一句(``core/device_onboarding/conversation.py`` 的 ``announce_soon``),
-测试里每个网关各起各的循环。锁一坏,会话从此写不进去,只在日志里留一行 debug。
+* 之后别的循环一排队,就当场抛 ``RuntimeError: ... is bound to a different event loop``;
+* 一个循环停了而持锁的任务没收尾,这把锁就永远「锁着」且绑在已经没了的循环上,所有循环都进不来。
 
-同一个循环里照旧互斥。跨线程的一致性本来就不归 asyncio.Lock 管(会话落盘另有线程锁)。
+CI 上抓到过后一种(会话管理器:``[locked, waiters:1] is bound to a different event loop``)。
+
+这里怎么做
+----------
+同一个循环里拿到的永远是同一把锁,照旧互斥;不同循环各一把。跨循环本来就互斥不了 —— 一把
+``asyncio.Lock`` 管不了别的循环;要跨线程互斥的状态该用 ``threading.Lock``。键是循环本身(弱引用),
+循环没了它那一项跟着回收。用法与 ``asyncio.Lock`` 相同:``async with lock:``。
 """
 
 from __future__ import annotations
 
 import asyncio
-import threading
 import weakref
 
 
 class LoopLocalLock:
-    """用法和 ``asyncio.Lock`` 一样(``async with lock:``),只是每个事件循环各拿各的那把。"""
+    """``async with`` 拿当前循环的那把锁。"""
 
     def __init__(self) -> None:
-        # 以循环为弱键:循环没了,它那把锁跟着回收
         self._locks: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock]" = weakref.WeakKeyDictionary()
-        self._guard = threading.Lock()
 
-    def _current(self) -> asyncio.Lock:
+    def current(self) -> asyncio.Lock:
+        """当前事件循环的那把锁(没有就建一把)。只能在跑着的循环里调。"""
         loop = asyncio.get_running_loop()
-        with self._guard:
-            lock = self._locks.get(loop)
-            if lock is None:
-                lock = self._locks[loop] = asyncio.Lock()
-            return lock
+        lock = self._locks.get(loop)
+        if lock is None:
+            lock = self._locks.setdefault(loop, asyncio.Lock())
+        return lock
 
     def locked(self) -> bool:
-        """当前循环里这把锁是不是被占着。"""
-        return self._current().locked()
+        return self.current().locked()
 
     async def __aenter__(self) -> None:
-        await self._current().acquire()
+        await self.current().acquire()
 
-    async def __aexit__(self, *exc_info) -> None:
-        # 进出在同一个协程里,也就在同一个循环里:拿到的是进门时那把
-        self._current().release()
+    async def __aexit__(self, *exc) -> None:
+        self.current().release()

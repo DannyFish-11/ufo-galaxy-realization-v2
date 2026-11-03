@@ -63,7 +63,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   `GALAXY_NATS_URL` 只说总线在哪，**不参与**判模式。面板上切换的只有「跨设备」一个按钮（写主键、`GALAXY_SYSTEM_MODE` 与唯一成员 `GALAXY_NATS_ENABLED`）。
   「混合」不是模式，是一个请求的走法（入口判定 `resolve_entry_mode`，跟着电脑的开关走）；`core/hybrid_executor.py` 的「混合执行」是单台设备内部的降级链，别混。
 - **模型看的是每台设备的「整体卡」，不是固定角色**（`core/device_onboarding/device_card.py`，`devices__list` 与 `GET /api/v1/onboarding/cards` 同一份）：
-  是什么 / 能做什么（设备自己报的动作 + 一句说明：`capability_report` 的 `capability_schemas[].description` 或 `action_descriptions`）/ 现在怎么样（在线、电量、网络路径、忙不忙、手表能否打扰）/
+  是什么（分类认不出的别家生态 / 新种类照它自己报的原话，`core/device_onboarding/service.py::_type_of`，不往分类表里加种类）/ 能做什么（设备自己报的动作 + 一句说明：`capability_report` 的 `capability_schemas[].description` 或 `action_descriptions`）/ 现在怎么样（在线、电量、网络路径、忙不忙、手表能否打扰）/
   能否接派来的 Agent（`can_take_agent`）/ 最近做过什么（任务流程图）。谁做什么由模型定，规则只过滤；「感知 / 动作 / 在场」（`core/mesh/device_role_allocator.py`）只是观测标签，
   **别让派发路径读它**（`tests/test_the_model_sees_each_device_as_a_whole.py` 守着）。每次单动作下发都记进任务流程图（`device_card.record_dispatch`）。
 - **对外 A2A**（中心智能体 ↔ 派出去的 Agent：手机上的桥接 Agent、载体上的 Agent）：AIP v3 `a2a` 帧，信封与「必达」链路在 `core/a2a_link.py`，与安卓 `shared-protocol/.../A2A.kt` 线格式逐字一致（改一边必须改另一边，`tests/test_external_a2a_link.py` 对照）。
@@ -81,6 +81,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   「websocket」传输走规范入口的 `UnifiedConnectionManager`。`get_aip_transport().send` 失败是**返回** `{"success": False}`、不抛异常 —— 调用方要看返回值再兜底；
   处理器的返回值已经由设备入口写回，别再经 AIPTransport 另推一份同样的帧。
   规范设备入口把连接自己的凭证（握手 Bearer / 回过 `auth_ok` 的令牌）带给不带令牌的帧 —— 安卓的 `device_register` 就不带令牌（`tests/test_phone_joins_through_its_bridge_agent.py` 守着）。
+  规范设备入口一帧一帧地读：**交给智能体跑一整轮的帧（手表的 `voice_query` 等）在后台跑**（`galaxy_gateway/device_turns.py`）—— 这一轮要在手表上问批准，而回答走同一条连接，在读循环里等就永远读不到（第 13 轮真跑：点了「批准」照样超时）。
 - **成员找得到、连得上智能体，不分模式**：mDNS 广播一直做（`GALAXY_MDNS=0` 可关）；配了自建 headscale 就入 tailnet；设备接入平面（智能体的设备工具）、
   局域网发现都不是「跨设备」的成员；headscale / TURN / STUN 配置项面板上一直显示。
 - **任务派发**（`GALAXY_MASTER_BRAIN_ENABLED`，类名 `MasterBrain`：经 NATS 把任务派给 worker）是智能体的工具，**只看它自己的开关**，开了就把 NATS 拉起来；
@@ -129,15 +130,51 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   画法是**内嵌的行**（`.vd-card` 左栏说明 + 右栏输入，与设置页 `.sf-row` 同一个节奏），不是凸起的卡片 —— `tests/test_the_api_entry_is_inline_rows_not_cards.py` 钉着。
 - `core/routing_tail.py` - 偏好表没列、但已配好可用的厂商（用户自加端点、OneAPI、只配了 Groq 的人做推理任务）排在失败转移链的最后几档；有意不自动参与的（智谱编码套餐）不进这一档
 
+### 要人点头的操作（批准）
+- `core/approval_gate.py` - 「问人批准」的**唯一入口** `request_approval()`：查授权 → 判在哪问 → 问 → 等 → 落授权。工具门（`openclawd` 内联 / `CanonicalDispatcher`）、
+  节点拨盘门（`GALAXY_AUTONOMY`，`core/node_invocation.py` → `gate_node_call`）、智能家居、GitHub 插件准入都调它，**别再各写一份「问完再试」**。
+  从哪发起就在哪批：电脑发起的在面板上批（WS `type="approvals"` 只带摘要，令牌走带鉴权的 `GET /api/v1/approvals`；岛上一张「等你批准」卡），
+  别的设备发起的在那台设备上问（`high_risk_confirmation.confirm_high_risk_tool`）；桌面外壳没连着就不白等。
+  **哪台设备能回答批准只有一条规则 `core/approvers.py`，按设备自己的声明，不按种类**：报能力 / 接入时说 `"approvals": true` 的就问它（哪个生态都一样），没声明的只认已经发出去、确实会答的手表（旧客户端兼容，不是扩展点）—— **别再往代码里加设备种类**。发起的那台答不了（今天的安卓 App）→ 电脑面板上问并告诉它去哪儿批；电脑没开 → 问别的声明了能批的设备；一处都没有 → 不做、照实说。开了设备准入闸、还没被主人批准的设备声明了也不算（`tests/test_any_device_that_says_it_can_approve_is_asked.py`）。**只认被问到的设备的回答**：`human_input` 按这条连接认证过的设备号核对，问题没发给它就不算（`PendingDecisionRegistry.resolve(from_device=…)`）。安卓 / 手表仓要补的（帧格式逐字、改哪个文件、怎么验）：`docs/DEVICE_CLIENT_REQUIREMENTS.md`
+  授权按「动作 × 对象」记（`node:<编号>:<动作>[/<子动作>]@<对象>`），默认「本会话」= 这段对话，「一直允许」落数据目录 `approval_grants.json`、面板能撤。
+  一次调用只问一次（工具门批过的，节点门认）；门禁自己出错一律不执行（节点门：读照放、写不执行）。设计与进度：`docs/GROUNDED_AGENT_DESIGN.md`
+- 工具的单次时间预算（`core/tool_permissions.py::tool_call_timeout_s`）给等人、给长任务留够：会停下来问人的按确认超时，`computer_use__run` 按步数，
+  带 `verify_command` 的 `engineer__apply` 按验证超时，`github__install` 按 clone + 加载 + 问人 —— 原先一律 30 秒，长任务被半路掐断
+
+### 边说边核（回答里的事实当场核、错了在同一段里改）
+- `core/live_check.py` - 一轮一本账（`TurnLedger`）：工具循环每调一次记一笔（`note_tool_outcome`），流式出字按句交给核对线。只用规则判要不要核（「做好了」、某台设备在线 / 离线），
+  快的两级：这一轮**真实的工具结果**、**成员视图**里的在线（名字取自设备登记，`OnboardingService.member_view`；连接管理器的元数据里没有名字）。
+  结论四种去处：SSE `revise` 帧 + `done.revisions`（面板原地划掉跟更正，留原文）；会话与记忆写**改过的文字**；驳倒一句就请生成在**下一个句界**收住、带着更正接着说（每轮一次；`TokenStream.ready_to_stop()`，半句话不收）；
+  语音只念实质更正、每轮最多两处、查不到的不念。**句子永远不触发动作**
+- `core/live_check_late.py` - 一轮结束后的慢两级：时效性的句子与标了「猜」的句子联网核（Brave，要 `BRAVE_API_KEY`；Google 只回链接，不用），**换一个模型**裁决
+  （这一轮用过的厂商不当裁判；指不出搜索结果里的出处 = 没核）。驳倒的改会话文字、推 WS `revise`、岛上一张卡。后台任务用空上下文起（裁判的字不流进人的对话）。
+  缺联网 / 缺第二个模型照实说：`GET /api/v1/agent/live-check`
+- `core/conjecture_ledger.py` - 说出口的猜想与它后来的结论（类型化、落数据目录），校准 `hit_rate` 没有结论时是 null。**只给人看，不进任何决策模块**（测试扫描守着）
+- 有据回答的几条规矩在 Genome 里：`config/genomes/grounded/` 只声明 `instructions.grounding`，`core.genome` 把它接在主循环 / 内核对话路（`chat_prompt()`）/ Agent 模板三处提示词后面；
+  `config/genomes/active.json` 指向它。默认 Genome 不动（指到 default 时逐字节等于旧硬编码）；人给的提示词（`GALAXY_SYSTEM_PROMPT`）原样用、不接规矩
+
 ### 事件循环里不跑阻塞的事
 Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示 5–7 秒」= 循环被一件同步的事占住了。已经挪出循环的：开麦克风 / 枚举音频设备
 （`core/multimodal/audio_ingest.py`、`system_audio_capture_service.py`）、第一次选 TTS 引擎（`core.speech_output.speech_engine_ready()`）、创建节点进程
 （`launcher/service_manager.py`）、拓扑图整份落盘（启动时的一百多次登记合成一次，`core/persist_batch.py`）、每个 httpx 客户端各载一遍 CA 证书
 （`core/shared_tls.py`）。**节点子进程的输出写 `logs/nodes/<名字>.log`，不接管道**（没人读的管道写满，子进程卡死在 write() 里；Windows 管道缓冲只有 4KB）。
+进程级单例要 asyncio 锁用 `core.loop_local_lock.LoopLocalLock`（每个事件循环一把）：整个进程一把 `asyncio.Lock` 会绑在第一个排队的循环上，别的循环一来就抛「bound to a different event loop」（会话管理器在 CI 上抓到过）。
 
 ### 节点（各自一个进程的微服务）
 - **缺东西就照实失败，不模拟成功**：没连设备 / 没配 Key / 没有命令时，节点回 `success: false` 并说缺什么（`nodes/common/mock_drivers.py`）；
   模拟只在显式 `USE_MOCK_DRIVERS=true` 时才有。没有调用方读 `mock` 那一位，看的都是 `success`。Node_58 的 `/chat` 走 `core.multi_llm_router`（与对话主链同一个），没模型就 503
+- **节点自己回失败，整条调用就是失败**：`NodeInvocationResult` 任一层回 `success: false` 就是 `success=False`（`node_reported_failure`），REST 回 502。
+  用通用 fusion 入口的节点，模块上没有 process / execute / run / handle（117 个里 112 个）时，统一执行器把动作接到**节点自己同名的那条路由**
+  （`core/node_route_bridge.py`）：节点进程在跑就 HTTP 打它，没在跑就在本进程里起一个节点实例（自己的线程与循环，startup 跑一次）；
+  进程后来起来了，进程那份一答话就把本进程这份收掉（**只认一份**，否则状态分家）。通用入口调不了的（没把 main.py 载成、「入口」其实是一条路由）直接按路由调。
+  只认确定的：路由最后一段或处理函数名与动作名相同；参数放哪儿照 FastAPI 对那条路由的登记；**同一个名字对上几条路由不替调用方选**（照实列出、请用处理函数名）。
+  同步写法的入口在工作线程里跑（`core/node_facade_local.py`）。**节点不许编数据**：模拟只在 `USE_MOCK_DRIVERS=true` 时有，
+  `tests/test_every_node_is_reachable_or_says_why.py` 扫描会模拟的分支有没有看这个开关
+- **模型用节点**：`nodes__list` 查（目录 / 按用途找 / 一个节点的动作、参数、档、调了要不要先问人）、`nodes__invoke` 调（`core/node_tools.py`）。
+  每个动作一个档（`core/node_action_risk.py`：只读 / 会改东西 / 危险 / 极危险）：**危险与极危险总要问人**（经 `approval_gate.request_approval`，不看自治档位 —— 所有者的决定），
+  会改东西只在谨慎档问；批过的这一次节点拨盘门认；`node__<节点>__<动作>` 工具在工具门也按同一套档判（`core/tool_permissions.py::_node_tool_policy`）。一个节点有哪些动作只有一处说法 `core/node_actions.py`：路由型照 FastAPI 的登记，入口型照入口模块上的 `actions()`
+  —— **给入口加动作，`actions()` 要跟着改**（服务对象型的模板入口经 `nodes/common/service_entry.py` 照实从服务上列，请求对象由参数建）。
+  认不出 / 有歧义 / 缺必填参数不执行。**节点声明的类别一处说了算**（`core/node_declared_class.py`）：旧编排节点（Node_110 / 81 / 50）、占位节点不走规范调用路径 —— 启动器按它登记、治理门对没登记（进程内起）的节点也按它判、模型的节点目录不列。`tests/test_the_model_can_use_nodes_and_asks_before_risky_ones.py` 把全部节点扫一遍：名字里有执行 / 删 / 发 / 推的不低于危险，跑代码与操控设备的节点写动作不低于危险
 - core / 别的节点打节点端点要带身份：`core.internal_auth.internal_headers_for(url)`（节点 HTTP 面默认有鉴权）；`tests/test_all_node_http_surfaces_require_auth.py` 扫描调用点
 - 同一个节点只起一份：`ServiceManager.start_service` 见已在跑 / 正在起就不再建进程，`register_service` 不换掉已有条目（并发激活曾起两份、前一个停机后还活着）；
   启动那一批节点的登记，节点表只落盘一次（`NodeFabricRegistry.batched_persistence()`）
@@ -234,6 +271,7 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - 电脑没加入网络、也没开任务派发时不起 NATS —— 这是对的状态，不算降级；mDNS 广播不分模式，没配 headscale 时不入 tailnet 只给一行说明（`launcher/bus_phase.py`）；节点进程活着只是慢，说「还在起来」不算降级
 - `core/loop_stall_watch.py` - 事件循环停跳 0.5 秒以上时记下卡在仓库哪几行、最里面卡在库的哪一行、同一时刻别的线程在 import 什么（循环线程可能只是在等 GIL）。日志里「一批请求同一毫秒一起慢」先看它那一行
 - 本机 Ollama 超时不重发（`core/local_llm_policy.py`）：慢不是故障，重发等于从头再算
+- **停进程按 PID / 它自己的进程组，不按命令行里的一个词**（`core/own_process.py::stop_own_process`）：拉起时记下 `Popen`，停时只停它。曾经的 `pkill -f ollama` 会杀掉命令行里任何带 ollama 的进程（人自己开的 Ollama、跑着 `test_*ollama*.py` 的测试分片）；`stop.sh` 的兜底只停工作目录在本仓库里的进程
 - 基础设施那一行（Docker / Podman）按各服务此刻的状态说（`launcher/compose_health.py`）：`compose up -d` 退出码 0 不等于已就绪；起不来的点名。
   起哪几个也在这里定（`infra_services()`）：本地模式不起 nats 容器（与 `nats_wanted()` 同一判据）；redis / qdrant / neo4j / mongodb 的端口只绑 127.0.0.1
 - **控制台只上结论和错误**（`core/console_log.py`）：WARNING 是过程诊断，进 `logs/lumiv.log`，`-v` 才上屏；写控制台在专门的线程里（Windows 控制台被选中文字时挂起写入，曾卡住事件循环 13.8 秒）。别再往控制台 `print` 诊断

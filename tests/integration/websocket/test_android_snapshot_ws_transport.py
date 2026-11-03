@@ -74,27 +74,17 @@ ANDROID_SNAPSHOT_PAYLOAD: Dict[str, Any] = {
 
 @pytest.fixture(scope="module")
 def gw_client():
-    """Minimal FastAPI app with Android WS routes — module-scoped.
+    """Minimal FastAPI app with the device WS route — module-scoped (the old /ws/android routes were retired).
 
     Mirrors the fixture in ``test_aip_v3_ws_contracts.py``, which is the
     tested-and-working pattern for WebSocket transport tests in this project.
     """
-    from fastapi import FastAPI, Query, WebSocket
+    from fastapi import FastAPI, WebSocket
     from fastapi.testclient import TestClient
 
     from galaxy_gateway.app import _handle_android_ws
 
     minimal_app = FastAPI()
-
-    @minimal_app.websocket("/ws/android/{device_id}")
-    async def ws_android_primary(websocket: WebSocket, device_id: str):
-        await _handle_android_ws(websocket, device_id)
-
-    @minimal_app.websocket("/ws/android")
-    async def ws_android_fallback(websocket: WebSocket, device_id: str = Query(None)):
-        if not device_id:
-            device_id = str(uuid.uuid4())
-        await _handle_android_ws(websocket, device_id)
 
     @minimal_app.websocket("/ws/device/{device_id}")
     async def ws_device(websocket: WebSocket, device_id: str):

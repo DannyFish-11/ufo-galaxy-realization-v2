@@ -225,17 +225,30 @@ class PendingDecisionRegistry:
         selected_option: Optional[str] = None,
         voice_input: str = "",
         source: str = "",
+        from_device: str = "",
     ) -> bool:
         """Resolve a pending decision with a human reply.
 
         Returns ``True`` iff a matching pending decision was found and resolved.
         First reply wins; later replies for the same id are no-ops (e.g. when
         the same decision was fanned out to several devices).
+
+        ``from_device``(网关按这条连接认证过的设备号填):问题发给了哪几台,就只认这几台的回答 ——
+        没问它的设备拿着决策号回一句「批准」不算(批准是替主人做决定,不能由旁观的设备代答)。
         """
-        record = self._pending.pop(decision_id, None)
+        record = self._pending.get(decision_id)
         if record is None:
             logger.debug("HITL.resolve: no pending decision for id=%s", decision_id)
             return False
+        if from_device and record.devices and from_device not in record.devices:
+            logger.warning(
+                "HITL.resolve: 不是问它的设备回的答,不算 | decision_id=%s from=%s asked=%s",
+                decision_id,
+                from_device,
+                record.devices,
+            )
+            return False
+        self._pending.pop(decision_id, None)
         self._resolved += 1
         outcome = DecisionOutcome(
             decision_id=decision_id,
@@ -510,13 +523,43 @@ async def _default_emit(device_id: str, message: Dict[str, Any]) -> None:
     await connection_manager.send_to_device(device_id, message)
 
 
+def _is_askable_type(dtype: str) -> bool:
+    """只按种类看：没声明的设备里，已经发出去的客户端确实会答的那一类（手表）。
+
+    能不能问一台设备，一处说了算 —— :func:`core.approvers.answers_approvals`（先看设备自己的 ``approvals`` 声明）。
+    这里只是它给旧客户端留的兼容那一半；新设备一律声明，不往这里加种类（所有者：「不用每一次都要自己加一种设备」）。
+    手机不在这里：安卓 App 不处理 ``decision_request``（第 14 轮只读核对安卓仓），问过去没人显示。
+    """
+    from core.approvers import _shipped_client_answers
+
+    return _shipped_client_answers(dtype)
+
+
+async def discover_answering_devices() -> List[str]:
+    """此刻在线、能回答批准的设备(``core.approvers`` 那一条规则)。批准门先看有没有能问的,再告诉发起的设备去哪儿批。"""
+    return await _discover_target_devices()
+
+
 async def _discover_target_devices() -> List[str]:
-    """在线、并且自己声明过能回答提问的设备(同一条决策分叉到这些设备上,先答的算数)。
+    """Auto-discover connected devices that can answer a decision (``core.approvers.answers_approvals``).
 
     能不能问,看设备自己报的(``answers_decisions``,见 ``core.device_declarations``),**不看它是什么类型的
     设备** —— 此前按类型名单认手表和手机,于是名单外的设备哪怕能问也问不到,名单里的手机却收到它根本
     不显示的提问。
     """
-    from core.device_declarations import online_devices_that
+    from core.approvers import answers_approvals
+    from core.device_declarations import online_devices
 
-    return await online_devices_that("answers_decisions")
+    # 在线的设备:UCM 为准,旧入口连上来的也认(core.device_declarations.online_devices,一处说了算)。
+    # 设备报的种类 approvers 自己从 UCM 连接元数据里读;REST 登记表只补它读不到的。
+    try:
+        from core.routes._shared import registered_devices  # noqa: PLC0415
+    except Exception:  # noqa: BLE001
+        registered_devices = {}
+
+    targets: List[str] = []
+    for did in await online_devices():
+        dtype = str((registered_devices.get(did) or {}).get("device_type", ""))
+        if answers_approvals(did, dtype):  # 设备自己的声明优先;没声明才看是不是已知会答的旧客户端
+            targets.append(did)
+    return targets

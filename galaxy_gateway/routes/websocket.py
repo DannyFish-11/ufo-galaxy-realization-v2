@@ -7,23 +7,31 @@ CANONICAL DEVICE INGRESS AUTHORITY
 DEVICE_WS_INGRESS_SURFACE_REGISTRY 保持一致):
 
     /ws/device/{device_id}   [CANONICAL]        规范设备入口(唯一)
-    /ws/android/{device_id}  [COMPAT]           旧安卓路径参数入口 → 委派规范处理器
-    /ws/android              [COMPAT]           旧安卓查询参数入口 → 委派规范处理器
-    /ws/ufo3/{device_id}     [COMPAT]           原 [LEGACY-DISABLED];PR-25 起改为
-                                                委派规范处理器的兼容入口
+    /ws/webrtc/{device_id}   [MEDIA]            WebRTC 信令代理(只承载媒体信令)
+    /ws/android/{device_id}  [RETIRED]          2026-11-02 退役(所有者定)
+    /ws/android              [RETIRED]          2026-11-02 退役
+    /ws/ufo3/{device_id}     [RETIRED]          2026-11-02 退役(原默认关,GALAXY_ENABLE_LEGACY_PROTOCOLS 随之删除)
     /ws/{device_id}          [DEPRECATED]       已移除——新客户端一律使用 /ws/device/
     /ws                      [DEBUG]            已移除——调试入口不再对外暴露
 
-所有入口面(规范与兼容)统一汇聚到 _handle_android_ws 单处理器,消息处理
-与入口记账不会随路由分叉。本模块只主张设备【入口】权威,不主张编排
+退役前核对过:安卓 App 与手表的全部提交历史里一次都没连过这三条(两边一直只连
+/ws/device/{device_id}),本仓库里也没有任何客户端、部署配置在用;客户端配置发现
+(GET /api/v1/config 的 ws_paths)只再给规范路径。连旧路径的请求在握手时就被拒
+(没有这条路由),不会进处理器。``tests/test_retired_device_ingress_stays_retired.py`` 守着。
+
+设备入口统一汇聚到 _handle_android_ws 单处理器,消息处理与入口记账不会随路由分叉。本模块只主张设备【入口】权威,不主张编排
 (orchestration)或就绪(readiness)权威。
 
 PR-GATEWAY-FIX: 同时提供 core/api_routes.py 所需的兼容导出(入口权威声明与入口登记表)。
 """
 
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
+
+#: 后台跑着的智能体回合(设备发起的一整轮,见 galaxy_gateway/device_turns.py):留一个引用,任务不被回收、连接断了也做完
+_TURNS: set = set()
 
 # ── Constants required by core/api_routes.py ──
 
@@ -41,30 +49,6 @@ DEVICE_WS_INGRESS_SURFACE_REGISTRY = [
         "description": "Canonical WebSocket ingress for Android Agent and IoT devices",
         "handler": "_handle_android_ws",
         "classification": "canonical",
-    },
-    {
-        "path": "/ws/android/{device_id}",
-        "method": "WS",
-        "auth": "AIP_TOKEN",
-        "description": "Legacy Android ingress (path param) — delegates to canonical handler",
-        "handler": "_handle_android_ws",
-        "classification": "compat",
-    },
-    {
-        "path": "/ws/android",
-        "method": "WS",
-        "auth": "AIP_TOKEN",
-        "description": "Legacy Android ingress (query param) — delegates to canonical handler",
-        "handler": "_handle_android_ws",
-        "classification": "compat",
-    },
-    {
-        "path": "/ws/ufo3/{device_id}",
-        "method": "WS",
-        "auth": "AIP_TOKEN",
-        "description": "Legacy UFO3 ingress — delegates to canonical handler",
-        "handler": "_handle_android_ws",
-        "classification": "compat",
     },
     # 生产修复(登记表完整性缺口):/ws/webrtc/{device_id} 是本模块实际挂载的
     # 活跃 WS 入口(见下方 webrtc_signaling_ws → proxy_webrtc_signaling),
@@ -107,13 +91,14 @@ async def _handle_android_ws(
 
     Accepts the connection, then pumps inbound JSON messages through
     :class:`~galaxy_gateway.android_bridge.AndroidBridge` and writes the
-    bridge's responses back to the socket. All ingress surfaces (canonical
-    and compat) converge on this single handler so message handling and
-    ingress accounting cannot diverge per route.
+    bridge's responses back to the socket. The device ingress converges on
+    this single handler so message handling and ingress accounting cannot
+    diverge per route (the compat surfaces were retired on 2026-11-02).
     """
     from fastapi import WebSocketDisconnect
 
     from galaxy_gateway.android_bridge import android_bridge
+    from galaxy_gateway.device_turns import runs_an_agent_turn
 
     await websocket.accept()
     logger.info(
@@ -123,12 +108,8 @@ async def _handle_android_ws(
         ingress_classification,
     )
 
-    # 兼容入口用量记账 —— 记在这个**汇合点**上,不在每条路由里各写一遍。
-    # 上面那段 docstring 已经写明所有入口(规范的与兼容的)都收敛到这个处理器,
-    # "so message handling and ingress accounting cannot diverge per route";
-    # 用量记账同理:分散到各路由里必然漏掉一条,而漏掉的那条正好会显示成"没人用"。
-    #
-    # 这是 Q6(旧协议退役日期)的输入 —— 那个决定一直定不了,不是缺决心,是缺数据。
+    # 兼容入口用量记账 —— 记在这个**汇合点**上,不在每条路由里各写一遍(分散到各路由里必然漏掉一条,
+    # 漏掉的那条正好会显示成「没人用」)。2026-11-02 起没有挂着的兼容 WS 入口了;将来真要加一条,记账已经在这儿。
     if ingress_classification == "compat":
         try:
             from core.compat_usage import record_use  # noqa: PLC0415
@@ -139,6 +120,21 @@ async def _handle_android_ws(
     # 这条连接自己的凭证:握手头里的 Bearer,或者这条连接上已经回过 auth_ok 的 auth 帧里的令牌。
     # 安卓先发 auth、再发不带令牌的 device_register —— 不把连接的凭证带给登记,认证开着时手机永远登记不上。
     transport_token = _bearer_token(websocket)
+    send_lock = asyncio.Lock()
+
+    async def _reply(response) -> None:
+        async with send_lock:
+            await websocket.send_json(response)
+
+    async def _run_turn(message) -> None:
+        """交给智能体的一整轮在后台跑,读循环接着读(这一轮里设备对批准的回答、心跳都靠它),见 galaxy_gateway/device_turns.py。"""
+        try:
+            response = await android_bridge.handle_message(websocket, message)
+            if response is not None:
+                await _reply(response)
+        except Exception as exc:  # noqa: BLE001 — 连接已经断了 / 回包发不出去:这一轮本身照样做完
+            logger.info("device ws turn reply not delivered for %s: %s", device_id, exc)
+
     try:
         while True:
             message = await websocket.receive_json()
@@ -150,9 +146,14 @@ async def _handle_android_ws(
             message.setdefault("_ingress_classification", ingress_classification)
             if transport_token and not _frame_token(message):
                 message["_ingress_transport_token"] = transport_token  # 登记照样重新校验(含配对令牌绑设备)
+            if runs_an_agent_turn(message):
+                task = asyncio.get_running_loop().create_task(_run_turn(message))
+                _TURNS.add(task)  # 连接断了也让这一轮做完(已批准的动作不做一半)
+                task.add_done_callback(_TURNS.discard)
+                continue
             response = await android_bridge.handle_message(websocket, message)
             if response is not None:
-                await websocket.send_json(response)
+                await _reply(response)
             if message.get("type") == "auth" and (response or {}).get("type") == "auth_ok":
                 transport_token = _frame_token(message) or transport_token
             if message.get("type") == "device_register" and (response or {}).get("success") is True:
@@ -210,11 +211,11 @@ async def _resend_a2a(device_id: str) -> None:
 
 
 def register_websocket_routes(app) -> None:
-    """Register the canonical and compat device WebSocket ingress routes.
+    """Register the device WebSocket ingress routes.
 
-    PR-25: exactly one canonical ingress (``/ws/device/{device_id}``); the
-    legacy ``/ws/android`` surfaces remain available but are classified as
-    compat and delegate to the same handler.
+    Exactly one device ingress (``/ws/device/{device_id}``) plus the media-only WebRTC signaling proxy.
+    The legacy ``/ws/android`` / ``/ws/android/{device_id}`` / ``/ws/ufo3/{device_id}`` surfaces were
+    retired on 2026-11-02 (no client in any of the three repos ever used them).
     """
     from fastapi import WebSocket
 
@@ -229,65 +230,11 @@ def register_websocket_routes(app) -> None:
             ingress_classification="canonical",
         )
 
-    @app.websocket("/ws/android/{device_id}")
-    async def websocket_android_primary(websocket: WebSocket, device_id: str):
-        """[COMPAT] 旧安卓入口——NOT the canonical ingress;委派规范处理器。"""
-        await _resolve_android_ws_handler()(
-            websocket,
-            device_id,
-            ingress_path="/ws/android/{device_id}",
-            ingress_classification="compat",
-        )
-
-    @app.websocket("/ws/ufo3/{device_id}")
-    async def websocket_ufo3_compat(websocket: WebSocket, device_id: str):
-        """[COMPAT] 旧 UFO3 入口——legacy 守卫默认关闭;开启后委派规范处理器。
-
-        PR-1 契约:legacy 协议面默认禁用(GALAXY_ENABLE_LEGACY_PROTOCOLS=1
-        显式开启),避免无人使用的历史入口成为常开攻击面。
-        """
-        if not _LEGACY_PROTOCOLS_ENABLED():
-            await websocket.close(
-                code=1008,
-                reason=(
-                    "legacy ufo3 ingress disabled; set "
-                    "GALAXY_ENABLE_LEGACY_PROTOCOLS=1 or use /ws/device/{device_id}"
-                ),
-            )
-            return
-        await _resolve_android_ws_handler()(
-            websocket,
-            device_id,
-            ingress_path="/ws/ufo3/{device_id}",
-            ingress_classification="compat",
-        )
-
     @app.websocket("/ws/webrtc/{device_id}")
     async def webrtc_signaling_ws(websocket: WebSocket, device_id: str):
         from galaxy_gateway.webrtc_proxy import proxy_webrtc_signaling
 
         await proxy_webrtc_signaling(websocket, device_id)
-
-    @app.websocket("/ws/android")
-    async def compat_android_query_ws(websocket: WebSocket):
-        device_id = websocket.query_params.get("device_id", "")
-        await _resolve_android_ws_handler()(
-            websocket,
-            device_id,
-            ingress_path="/ws/android",
-            ingress_classification="compat",
-        )
-
-
-def _LEGACY_PROTOCOLS_ENABLED() -> bool:
-    """legacy 协议入口(/ws/ufo3)是否显式开启——默认禁用。"""
-    import os
-
-    return os.environ.get("GALAXY_ENABLE_LEGACY_PROTOCOLS", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-    )
 
 
 def _resolve_android_ws_handler():

@@ -10,10 +10,10 @@ Tests for the Android cross-device compatibility layer:
    - POST /api/devices/heartbeat
    - POST /api/devices/unregister
 
-2. WebSocket legacy paths  (galaxy_gateway/app.py)
+2. WebSocket device ingress  (galaxy_gateway/app.py)
    - /ws/device/{device_id}
-   - /ws/ufo3/{device_id}
-   - /ws/android
+   - 旧的 /ws/ufo3/{device_id}、/ws/android 于 2026-11-02 退役:握手即被拒
+     (完整守卫见 tests/test_retired_device_ingress_stays_retired.py)
 
 3. Protocol compatibility parser  (galaxy_gateway/protocol/compat.py)
    - AIP/1.0 normalisation (register / heartbeat aliases)
@@ -182,7 +182,7 @@ def gw_client():
 
 
 class TestLegacyWebSocketPaths:
-    """Smoke-test that the legacy WS paths accept connections."""
+    """The device ingress accepts connections; the retired legacy paths do not."""
 
     def _connect_and_ping(self, client: TestClient, path: str) -> None:
         """Open a WS connection, send a heartbeat, check for ack."""
@@ -205,48 +205,14 @@ class TestLegacyWebSocketPaths:
         """/ws/device/{device_id} accepts connections and handles heartbeats."""
         self._connect_and_ping(gw_client, "/ws/device/{device_id}")
 
-    def test_ws_ufo3_path(self, gw_client, monkeypatch):
-        """/ws/ufo3/{device_id} accepts connections and handles heartbeats."""
-        # 断言漂移修正(生产契约演进,PR-1):legacy 协议面默认禁用——
-        # /ws/ufo3/{device_id} 在未设 GALAXY_ENABLE_LEGACY_PROTOCOLS=1 时
-        # 直接以 1008 关闭(见 galaxy_gateway/routes/websocket.py 的
-        # websocket_ufo3_compat),避免无人使用的历史入口成为常开攻击面。
-        # 本测试验证的是 legacy 兼容路径开启后仍能委派规范处理器,故显式
-        # 按契约开启开关;默认拒绝行为由 PR-1 相关测试覆盖。
-        monkeypatch.setenv("GALAXY_ENABLE_LEGACY_PROTOCOLS", "1")
-        self._connect_and_ping(gw_client, "/ws/ufo3/{device_id}")
+    @pytest.mark.parametrize("path", ["/ws/ufo3/{device_id}", "/ws/android?device_id={device_id}", "/ws/android"])
+    def test_retired_paths_are_refused(self, gw_client, path):
+        """旧入口退役(2026-11-02):真网关上握手即被拒,不进处理器。原先这里测的是它们能连上、能回心跳。"""
+        from starlette.websockets import WebSocketDisconnect
 
-    def test_ws_android_with_device_id(self, gw_client):
-        """/ws/android?device_id=... accepts connections."""
-        device_id = f"android-{uuid.uuid4().hex[:8]}"
-        with gw_client.websocket_connect(f"/ws/android?device_id={device_id}") as ws:
-            ws.send_text(
-                json.dumps(
-                    {
-                        "version": "3.0",
-                        "type": "heartbeat",
-                        "device_id": device_id,
-                    }
-                )
-            )
-            msg = ws.receive_json()
-            assert msg.get("type") == "heartbeat_ack"
-
-    def test_ws_android_auto_device_id(self, gw_client):
-        """/ws/android without device_id auto-assigns one."""
-        # If no device_id is provided we still expect a heartbeat_ack
-        with gw_client.websocket_connect("/ws/android") as ws:
-            ws.send_text(
-                json.dumps(
-                    {
-                        "version": "3.0",
-                        "type": "heartbeat",
-                        "device_id": "ignored-by-server",
-                    }
-                )
-            )
-            msg = ws.receive_json()
-            assert msg.get("type") == "heartbeat_ack"
+        with pytest.raises(WebSocketDisconnect):
+            with gw_client.websocket_connect(path.format(device_id=f"old-{uuid.uuid4().hex[:8]}")):
+                pass
 
 
 # ============================================================================

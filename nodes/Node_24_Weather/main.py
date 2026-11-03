@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.mock_drivers import NotConfigured, mock_drivers_enabled
 from nodes.common.node_port import resolve_node_port
 
 from nodes.common.node_auth import install_node_auth
@@ -34,9 +35,22 @@ class WeatherManager:
         self.api_key = OPENWEATHER_API_KEY
         self.base_url = OPENWEATHER_URL
 
+    def _no_key(self) -> bool:
+        """没配 Key:只有显式打开模拟驱动才回模拟数据(nodes/common/mock_drivers.py),否则照实说缺 Key。
+
+        此前没 Key 就回一份写死的「22°C 多云」「空气质量良」—— 智能体拿它当真天气告诉人(第 9 轮真跑)。
+        Key 每次现读:面板后配的也认。
+        """
+        self.api_key = os.getenv("OPENWEATHER_API_KEY", "") or self.api_key
+        if self.api_key:
+            return False
+        if not mock_drivers_enabled():
+            raise NotConfigured("没配 OPENWEATHER_API_KEY,天气查不了")
+        return True
+
     def get_current_weather(self, city: str, units: str = "metric", lang: str = "zh_cn") -> Dict:
         """获取当前天气"""
-        if not self.api_key:
+        if self._no_key():
             # 返回模拟数据
             return {
                 "city": city,
@@ -49,7 +63,7 @@ class WeatherManager:
                 "visibility": 10000,
                 "clouds": 40,
                 "timestamp": datetime.now().isoformat(),
-                "note": "Using mock data (API key not configured)"
+                "mock": True, "note": "Using mock data (API key not configured)"
             }
 
         params = {
@@ -89,7 +103,7 @@ class WeatherManager:
 
     def get_forecast(self, city: str, units: str = "metric", lang: str = "zh_cn", days: int = 5) -> Dict:
         """获取天气预报"""
-        if not self.api_key:
+        if self._no_key():
             return {
                 "city": city,
                 "forecast": [
@@ -101,7 +115,7 @@ class WeatherManager:
                     }
                     for i in range(days)
                 ],
-                "note": "Using mock data (API key not configured)"
+                "mock": True, "note": "Using mock data (API key not configured)"
             }
 
         params = {
@@ -140,7 +154,7 @@ class WeatherManager:
 
     def get_air_quality(self, lat: float, lon: float) -> Dict:
         """获取空气质量"""
-        if not self.api_key:
+        if self._no_key():
             return {
                 "aqi": 2,
                 "quality": "良",
@@ -152,7 +166,7 @@ class WeatherManager:
                     "pm2_5": 8.4,
                     "pm10": 15.2
                 },
-                "note": "Using mock data (API key not configured)"
+                "mock": True, "note": "Using mock data (API key not configured)"
             }
 
         params = {
@@ -180,8 +194,8 @@ class WeatherManager:
 
     def get_weather_by_coords(self, lat: float, lon: float, units: str = "metric", lang: str = "zh_cn") -> Dict:
         """根据坐标获取天气"""
-        if not self.api_key:
-            return {"error": "API key not configured"}
+        if self._no_key():
+            return {"error": "API key not configured", "mock": True, "success": False}
 
         params = {
             "lat": lat,
@@ -238,6 +252,8 @@ async def get_current_weather(city: str, units: str = "metric", lang: str = "zh_
     """获取当前天气"""
     try:
         return weather_manager.get_current_weather(city, units, lang)
+    except NotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -246,6 +262,8 @@ async def get_forecast(city: str, units: str = "metric", lang: str = "zh_cn", da
     """获取天气预报"""
     try:
         return weather_manager.get_forecast(city, units, lang, days)
+    except NotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -254,6 +272,8 @@ async def get_air_quality(lat: float, lon: float):
     """获取空气质量"""
     try:
         return weather_manager.get_air_quality(lat, lon)
+    except NotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -262,6 +282,8 @@ async def get_weather_by_coords(lat: float, lon: float, units: str = "metric", l
     """根据坐标获取天气"""
     try:
         return weather_manager.get_weather_by_coords(lat, lon, units, lang)
+    except NotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

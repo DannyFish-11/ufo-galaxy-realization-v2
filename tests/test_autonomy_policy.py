@@ -4,7 +4,7 @@
 自治拨盘 + 审批分级授权:
   - 档位语义: safe(敏感节点全问) / guided(读放行写审批) / autonomous(不逐步问人)。
   - 范围: 只对声明了权限白名单的敏感节点生效。
-  - 授权: once 用后即焚 / session 进程期 / always 持久化且可撤销。
+  - 授权: once 用后即焚 / session 这段对话(没有对话 id 时退回进程期) / always 持久化且可撤销。
   - 执行器集成: 需审批的动作被排队(approval_required),授权后重试通过本门。
 """
 
@@ -90,7 +90,8 @@ class TestGrants:
         st = ap.get_grant_store()
         st.grant("Node_45_DesktopAuto", "click", ap.GrantScope.ALWAYS)
         g = st.list_grants()
-        assert "Node_45_DesktopAuto:click" in g["always"]
+        # 授权键与工具门同一种写法(core.approval_gate.node_key):节点按编号认,才对得上「问一次」
+        assert "node:45:click" in g["always"]
 
 
 class TestApprovalQueue:
@@ -130,3 +131,17 @@ class TestExecutorIntegration:
         env = NodeInvocationEnvelope(node_id="Node_36_UIAWindows", action="screenshot")
         result = asyncio.run(UnifiedNodeExecutor().execute(env))
         assert "approval_required" not in (result.error or "")
+
+
+def test_legacy_grant_keys_migrate_without_a_backtracking_regex():
+    """旧授权键照旧迁移;认不出的照原样 —— 而且一长串数字不会把启动拖住(CodeQL py/polynomial-redos)。"""
+    import time
+
+    from core.autonomy_policy import _grant_key, _migrate_key
+
+    assert _migrate_key("Node_36_UIAWindows:click") == _grant_key("Node_36_UIAWindows", "click")
+    for kept in ("node:36:click", "Node_x:click", "Node_36:a@b", "Node_36:a:b", "Node_36:", ":click", ""):
+        assert _migrate_key(kept) == kept, kept
+    started = time.monotonic()
+    assert _migrate_key("Node_9" + "0" * 200_000 + "x") == "Node_9" + "0" * 200_000 + "x"
+    assert time.monotonic() - started < 0.5

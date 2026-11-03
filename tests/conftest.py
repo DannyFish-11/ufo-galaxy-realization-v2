@@ -434,6 +434,45 @@ def _no_leaked_island_cards():
         mod.get_island_cards().reset()
 
 
+# 批准授权(core.autonomy_policy 的 GrantStore)是进程单例:一条用例批过「本会话」,没有对话 id 时就是进程期 ——
+# 不清掉的话,后面问同一个动作的用例会直接拿到「已有授权」,根本不去问人(GitHub 插件「拒绝」那条曾因此读成批准)。
+@pytest.fixture(autouse=True)
+def _no_host_sandbox(monkeypatch):
+    """Auto-use: 测试不去探这台机器上真在跑的沙箱节点(Node_09,7996)。
+
+    隔离判据(``core.execution_isolation``)会探本机端口:开发机上正跑着 Galaxy 时,用例的代码就被交给那个沙箱 ——
+    令牌对不上(用例用隔离的数据目录),结果 401、用例红,而 CI 上没有这个进程就全绿(第 9 轮,4 条)。
+    要沙箱的用例自己 ``monkeypatch.setattr(ei, "_node09_port", lambda: 7996)`` 并注入探活客户端,照常生效。
+    """
+    import core.execution_isolation as _ei
+
+    monkeypatch.setattr(_ei, "_node09_port", lambda: 0)
+    monkeypatch.delenv("NODE09_SANDBOX_URL", raising=False)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _no_leaked_approval_grants():
+    """Auto-use: 测试里落下的批准授权与还在等人批的请求,测试结束就清掉(内存里的;落盘的「一直允许」各用例
+    自己隔离数据目录)。待批请求不清,后面的用例一连上 WS 就会多收一帧 ``approvals``(整套跑才红、单跑全绿)。"""
+    yield
+    mod = sys.modules.get("core.autonomy_policy")
+    if mod is not None:
+        mod.reset_grant_store()
+    registry = sys.modules.get("core.control_plane._globals")
+    if registry is not None:
+        registry._approval_registry = None
+    # 在场桥共享的 IPC 会话:用例的循环关了就没人关它,退出时 aiohttp 记「Unclosed client session」。新循环上关掉
+    bridge = sys.modules.get("core.lumiv_websocket_bridge")
+    session = getattr(getattr(bridge, "GalaxyPresenceBridge", None), "_ipc_http_session", None)
+    if session is not None and not session.closed:
+        bridge.GalaxyPresenceBridge._ipc_http_session = None
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(bridge._close_quietly(session))
+
+
 # 反自激励门是带【时间状态】的进程单例:任何测试只要走过一次朗读路径
 # (speak_response / IncrementalSpeaker),就会往门里登记一段"刚说过的话",而它在留存
 # 窗口内(默认 6 秒 + 按文本长度估算的朗读耗时)会让所有以 recently_spoke() 为条件的

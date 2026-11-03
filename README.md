@@ -311,8 +311,8 @@ python main.py
 | `/api/v1/models/*` · `/api/config*` · `/api/v1/vault/*` | 模型档位、配置、密钥 |
 | `/health/live` · `/health` · `/metrics` · `/gateway/metrics` | 健康与 Prometheus 指标 |
 
-WebSocket：`/ws/desktop-presence`（桌面外壳）、`/ws/device/{id}`（安卓规范入口）、`/ws/status`、
-`/ws/android*`、`/ws/webrtc/{id}`，以及兼容旧客户端的 `/ws/ufo3/{id}`（待退役）。
+WebSocket：`/ws/desktop-presence`（桌面外壳）、`/ws/device/{id}`（所有设备唯一的入口）、`/ws/status`、`/ws/webrtc/{id}`。
+旧的 `/ws/android*`、`/ws/ufo3/{id}` 已于 2026-11-02 退役（安卓与手表 App 的全部历史里都没连过）。
 
 ---
 

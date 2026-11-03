@@ -188,6 +188,7 @@ class AndroidDevice:
                 surface="android_registration",
                 field_name="device_type",
                 device_id=device_id,
+                open_vocabulary=True,  # 每个生态用自己的叫法,不是契约分叉(core/approvers.py 的同一条:看声明,不按种类写死)
             ),
             platform=coerce_protocol_enum(
                 DevicePlatform,
@@ -195,6 +196,7 @@ class AndroidDevice:
                 surface="android_registration",
                 field_name="platform",
                 device_id=device_id,
+                open_vocabulary=True,  # 每个生态用自己的叫法,不是契约分叉(core/approvers.py 的同一条:看声明,不按种类写死)
             ),
             name=data.get("name"),
             model=data.get("model"),

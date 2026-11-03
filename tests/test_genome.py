@@ -77,7 +77,10 @@ def genomes(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_default_genome_reproduces_the_hardcoded_prompt_byte_for_byte():
+def test_default_genome_reproduces_the_hardcoded_prompt_byte_for_byte(monkeypatch):
+    # 出厂生效的是 grounded(在 default 后面接几条有据回答的规矩,见 tests/test_the_grounded_genome_is_on_and_the_default_is_untouched.py);
+    # G9 守的是**默认 Genome** 那条路:指到 default 时,出来的提示词与旧硬编码逐字节相同。
+    monkeypatch.setenv("GALAXY_GENOME", "default")
     assert gm.system_prompt() == HISTORICAL_SYSTEM_PROMPT
     assert gm.BUILTIN_SYSTEM_PROMPT == HISTORICAL_SYSTEM_PROMPT
     assert gm.load_genome("default").component("instructions")["system_prompt"] == HISTORICAL_SYSTEM_PROMPT

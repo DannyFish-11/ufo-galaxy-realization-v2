@@ -90,6 +90,16 @@ class HarnessRSIOperator:
 
     # -- 提案 ---------------------------------------------------------------
 
+    def _evolve_from(self, genomes_root: Path) -> str:
+        """进化 Genome 第一次建出来时接在哪一份上:指针此刻指着的那份(仓库出厂指 ``grounded``),不是一律接
+        ``default`` —— 否则元层的第一个补丁会一声不响地把「有据回答」那几条规矩丢掉。读不出 / 指向自己 → ``default``。"""
+        try:
+            name = str(json.loads((genomes_root / ACTIVE_POINTER).read_text(encoding="utf-8")).get("genome") or "")
+        except (OSError, ValueError, AttributeError):
+            name = ""
+        ok = name and name != self.evolved and (genomes_root / name / "genome.json").is_file()
+        return name if ok else DEFAULT_GENOME
+
     def _read(self, rel: str) -> Optional[str]:
         path = self.root / rel
         return path.read_text(encoding="utf-8") if path.is_file() else None
@@ -100,10 +110,9 @@ class HarnessRSIOperator:
         path = [str(p) for p in payload.get("path") or []]
         # 只读格（model）照样成补丁：拒绝由 Kernel 的可写面检查作出并落 lesson，不由提案者自己判。
         genomes_root = self.root / GENOMES_REL
+        base = self._evolve_from(genomes_root)
         try:
-            parent = load_genome(
-                self.evolved if (genomes_root / self.evolved).is_dir() else DEFAULT_GENOME, root=genomes_root
-            )
+            parent = load_genome(self.evolved if (genomes_root / self.evolved).is_dir() else base, root=genomes_root)
         except GenomeError as exc:
             return None, f"当前 Genome 不合法，不在其上提案：{exc}"
 
@@ -125,7 +134,7 @@ class HarnessRSIOperator:
             else {
                 "genome_schema_version": GENOME_SCHEMA_VERSION,
                 "genome_id": f"galaxy:{self.evolved}",
-                "base": DEFAULT_GENOME,
+                "base": base,
                 "version": 0,
                 "components": [],
             }

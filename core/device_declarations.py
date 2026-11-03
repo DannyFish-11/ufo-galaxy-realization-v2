@@ -70,8 +70,3 @@ async def online_devices() -> List[str]:
     except Exception:  # noqa: BLE001
         pass
     return candidates
-
-
-async def online_devices_that(what: str) -> List[str]:
-    """在线、并且自己声明过 ``what`` 的设备。"""
-    return [did for did in await online_devices() if declares(did, what)]

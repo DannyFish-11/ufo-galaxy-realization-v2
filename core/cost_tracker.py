@@ -37,7 +37,12 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Optional
 
+from core.data_paths import data_path_or_legacy
+
 logger = logging.getLogger("Galaxy.CostTracker")
+
+#: 原先的固定位置(源码树里的 data/):已有的记录继续用
+_REPO_DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
 # 默认成本表（每千 token 的美元价格）
 DEFAULT_COST_TABLE: Dict[str, Dict[str, float]] = {
@@ -79,9 +84,12 @@ class CostTracker:
     """
 
     def __init__(self, data_dir: str = None):
-        self._data_dir = data_dir or os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+        if data_dir:
+            self._log_file = os.path.join(data_dir, "cost_records.jsonl")
+        else:  # 随数据总目录走(第 12 轮真跑:原先写死源码树 data/,换了数据目录照样写进源码树);源码树里已有的继续用
+            self._log_file = data_path_or_legacy("cost_records.jsonl", os.path.join(_REPO_DATA, "cost_records.jsonl"))
+        self._data_dir = os.path.dirname(self._log_file) or "."
         os.makedirs(self._data_dir, exist_ok=True)
-        self._log_file = os.path.join(self._data_dir, "cost_records.jsonl")
         # 最近 500 条保存在内存中供快速查询
         self._records: List[CostRecord] = []
         self._consecutive_write_failures: int = 0
