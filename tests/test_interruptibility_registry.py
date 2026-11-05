@@ -282,7 +282,7 @@ def test_gate_is_bounded_deferral_not_permanent_drop():
 def test_known_bands_match_the_watch_side_contract():
     """与 galaxy-wearos 的 InterruptibilityBand.wire 一一对应。
 
-    手表侧由 `InterruptibilityWireContractTest` 钉死同一份字符串;
+    手表侧由 `WatchStateTest` 钉死同一份字符串;
     任何一侧单独改动都会让这两个测试之一变红。
     """
     assert set(KNOWN_BANDS) == {"unknown", "blocked", "busy", "neutral", "free"}

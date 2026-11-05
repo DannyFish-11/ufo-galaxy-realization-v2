@@ -1,0 +1,1 @@
+{"version":"3.0","type":"heartbeat","device_id":"WATCH_ID","timestamp":1700000000000,"payload":{"state":{"battery":0.41,"charging":false,"screen_on":false,"in_call":false,"interruptible":"blocked","note":"极可能在睡、静止"}}}

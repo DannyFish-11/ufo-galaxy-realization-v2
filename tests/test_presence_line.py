@@ -142,8 +142,8 @@ def test_the_desktop_runtime_identity_counts_as_this_machine():
 def test_there_is_no_switch(monkeypatch):
     """这是架构，不是偏好：曾经的两个回退开关设了也没用，模块根本不读环境变量。"""
     monkeypatch.setenv("GALAXY_PRESENCE_LINE", "off")
-    monkeypatch.setenv("GALAXY_PRESENCE_LINE_LEGACY_SOURCES", "wear_voice,chat")
-    assert decide_presence_line("wear_voice", "watch-1").host_bound is False
+    monkeypatch.setenv("GALAXY_PRESENCE_LINE_LEGACY_SOURCES", "device_voice,chat")
+    assert decide_presence_line("device_voice", "watch-1").host_bound is False
     assert decide_presence_line("chat", "phone-1").host_bound is False
     source = inspect.getsource(presence_line)
     assert "os.environ" not in source and "getenv" not in source
@@ -179,8 +179,8 @@ def test_detached_session_keeps_its_phases_but_does_not_surface(seb_events, phas
 
 def test_detached_session_still_carries_liminal_content():
     """认知段的阈限内容与预演闸门不受分流影响。"""
-    session = RuntimeSession(source="wear_voice")
-    bind_presence_line(session, "wear_voice", "watch-1")
+    session = RuntimeSession(source="device_voice")
+    bind_presence_line(session, "device_voice", "watch-1")
     with patch("core.cross_device_sync.tell_origin_device"):
         session.advance(TriState.LIMINAL)
     assert session.liminal_activity == "understanding"
@@ -224,8 +224,8 @@ def test_local_actuation_hands_the_request_back_to_the_desktop(seb_events, phase
 
 
 def test_attach_during_liminal_keeps_the_deliberation_content(seb_events, phase_pushes, ledger):
-    session = RuntimeSession(source="wear_voice")
-    bind_presence_line(session, "wear_voice", "watch-1")
+    session = RuntimeSession(source="device_voice")
+    bind_presence_line(session, "device_voice", "watch-1")
     with patch.object(session, "_on_advance_tick"):
         session.advance(TriState.LIMINAL)
         session.enter_liminal_activity("rehearsing", {"candidate_paths": ["A"]})
@@ -349,7 +349,7 @@ def _run(runtime: DesktopPresenceRuntime, **kwargs) -> Dict[str, Any]:
         {"source": "chat", "device_id": "phone-1", "entry_mode": "cross_device"},
         {"source": "chat", "device_id": "linux-box"},  # 通用接入的参与方、未登记设备同样不进
         {"source": "participant_task", "device_id": "ipad-1"},
-        {"source": "wear_voice", "device_id": "watch-1"},
+        {"source": "device_voice", "device_id": "watch-1"},
     ],
 )
 def test_other_devices_do_not_drive_the_desktop(seb_events, phase_pushes, ledger, spoken, kwargs):
@@ -375,6 +375,18 @@ def test_local_chat_drives_the_desktop_shell_as_before(seb_events, phase_pushes,
     assert spoken == ["chat"]
 
 
+def test_the_desktops_realtime_voice_drives_the_shell_but_is_not_read_aloud_again(
+    seb_events, phase_pushes, ledger, spoken
+):
+    """电脑自己的实时语音交过来的事（core.voice_call_agent 旁听）：是电脑的事，照常走三态；
+    结果作为【回报】插回实时会话由那个声音说，这里再念一遍就是两个声音。"""
+    runtime = DesktopPresenceRuntime()
+    _run(runtime, source="voice_duplex")
+    assert _phase_events(seb_events) == ["phase.liminal", "phase.manifest", "phase.silent"]
+    assert spoken == []
+    assert phase_pushes == []
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
@@ -394,8 +406,8 @@ def test_cross_device_started_on_the_desktop_goes_through_the_tri_state(seb_even
 
 def test_presence_summary_counts_only_desktop_sessions():
     runtime = DesktopPresenceRuntime()
-    detached = runtime._create_session("wear_voice")
-    bind_presence_line(detached, "wear_voice", "watch-1")
+    detached = runtime._create_session("device_voice")
+    bind_presence_line(detached, "device_voice", "watch-1")
     detached.tristate = TriState.MANIFEST
     summary = runtime.presence_summary()
     assert summary["dominant_tristate"] == "silent"
@@ -407,8 +419,9 @@ def test_presence_summary_counts_only_desktop_sessions():
 # ---------------------------------------------------------------------------
 
 
-def test_request_progress_reaches_only_the_origin_phone_and_never_a_watch(monkeypatch):
-    """进度只回发起的那台手机，报文标明是请求进度；手表不收（bridge 认不出 wearos 时看 UDM 归一的类型）。"""
+def test_request_progress_reaches_only_an_origin_device_that_shows_it(monkeypatch):
+    """进度只回发起的那台设备,报文标明是请求进度;只推给自己声明会显示进度的(shows_request_progress),
+    不看设备是什么类型 —— 没声明的(比如手表)、离线的、不认识的都不推。"""
     from core import cross_device_sync
 
     sent: List[tuple] = []
@@ -418,19 +431,15 @@ def test_request_progress_reaches_only_the_origin_phone_and_never_a_watch(monkey
         return True
 
     devices = {
-        "phone-1": SimpleNamespace(websocket=object(), connected=True),
-        "phone-2": SimpleNamespace(websocket=object(), connected=True),
-        "watch-1": SimpleNamespace(websocket=object(), connected=True),  # 缓存条目里没有类型
-        "watch-2": SimpleNamespace(
-            websocket=object(), connected=True, device_type=SimpleNamespace(value="android_wear")
-        ),
-        "phone-off": SimpleNamespace(websocket=None, connected=False),
+        "shows-1": SimpleNamespace(websocket=object(), connected=True),
+        "silent-1": SimpleNamespace(websocket=object(), connected=True),
+        "tv-shows": SimpleNamespace(websocket=object(), connected=True, device_type=SimpleNamespace(value="tv")),
+        "shows-off": SimpleNamespace(websocket=None, connected=False),
     }
+    declared = {"shows-1", "tv-shows", "shows-off"}
     bridge = SimpleNamespace(get_device=devices.get)
     udm = SimpleNamespace(
-        get_device=lambda did: (
-            SimpleNamespace(form_factor="watch", aip_device_type="android_wear") if did == "watch-1" else None
-        )
+        get_device=lambda did: SimpleNamespace(metadata={"shows_request_progress": did in declared}) if did else None
     )
     monkeypatch.setattr(cross_device_sync.upper_ports, "resolve", lambda name: bridge)
     monkeypatch.setattr(cross_device_sync, "_push_to_one_device", _one)
@@ -440,9 +449,9 @@ def test_request_progress_reaches_only_the_origin_phone_and_never_a_watch(monkey
         cross_device_sync.tell_origin_device(did, old_phase="silent", new_phase="liminal", session_id="s", source="x")
         await asyncio.gather(*list(cross_device_sync._BACKGROUND_PHASE_SYNC_TASKS))
 
-    for did in ("phone-1", "watch-1", "watch-2", "phone-off", "nobody", ""):
+    for did in ("shows-1", "silent-1", "tv-shows", "shows-off", "nobody", ""):
         asyncio.run(_tell(did))
-    assert [did for did, _ in sent] == ["phone-1"], "只到发起的那台手机；手表、离线的、不认识的都不推"
+    assert [did for did, _ in sent] == ["shows-1", "tv-shows"], "声明了会显示的才推,什么类型都一样;离线的不推"
     msg = sent[0][1]
     assert msg["event_action"] == "liminal" and msg["payload"]["sync_type"] == cross_device_sync.REQUEST_PROGRESS
 

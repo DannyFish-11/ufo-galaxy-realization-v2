@@ -199,6 +199,9 @@ def _pair(gw, name="书房笔记本"):
 
 
 def test_a_laptop_pairs_connects_and_the_agent_operates_it(gateway, monkeypatch):
+    # 这条测的是配对、连上、动作做得到;点屏幕是「改设备状态」,引导档要先问人 ——
+    # 那一道见 tests/test_device_actions_pass_the_boundaries.py,这里按自主档直接做
+    monkeypatch.setenv("GALAXY_AUTONOMY", "autonomous")
     invite, state, resp = _pair(gateway)
     assert invite["success"] and resp["success"] and state["token"]
 
@@ -217,7 +220,7 @@ def test_a_laptop_pairs_connects_and_the_agent_operates_it(gateway, monkeypatch)
     assert laptop.done == [("click", {"x": 10, "y": 20})]
 
     time.sleep(0.2)
-    assert gateway.spoken == ["笔记本「书房笔记本」配对好了,正在连过来。", "「书房笔记本」连上了,现在可以让我操作它。"]
+    assert gateway.spoken == ["「书房笔记本」配对好了,正在连过来。", "「书房笔记本」连上了,现在可以让我操作它。"]
 
 
 def test_an_unpaired_laptop_is_refused_and_says_so_instead_of_retrying_forever(gateway, monkeypatch):
@@ -387,4 +390,4 @@ def test_pairing_does_not_wait_for_the_conversation_record(gateway, monkeypatch)
     _, state, resp = _pair(gateway)
     assert resp["success"] and state["token"]
     assert time.time() - started < 5
-    assert gateway.spoken == ["笔记本「书房笔记本」配对好了,正在连过来。"]  # 推面板不等记录
+    assert gateway.spoken == ["「书房笔记本」配对好了,正在连过来。"]  # 推面板不等记录

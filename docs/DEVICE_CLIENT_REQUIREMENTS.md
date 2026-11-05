@@ -17,7 +17,7 @@
 | W1 | 手表 | `capability_report` 里声明 `"approvals": true` | **必须**（不做也照旧能批，但那是兼容，不是正路） | 不声明；中心按「已发出去的手表客户端」兼容认它 |
 | W2 | 手表 | 确认 `human_input` 只在用户点了选项时带 `selected_option`，语音只放 `voice_input` | 核对（现状已对） | 已对 |
 | X1 | 两边 | 旧入口 `/ws/ufo3`、`/ws/android` 退役 | **已做（2026-11-02，中心这边）**，两边不用改 | 两个 App 的全部历史里都只连 `/ws/device/{device_id}` |
-| X2 | 手表 | 通话时让智能体能动手（实时语音接工具） | 要所有者先定用哪家实时语音 | 通话是独立的实时模型对话，不接智能体的工具 |
+| X2 | 手表 | 通话时让智能体能动手（实时语音接工具） | **已做（中心这边，V2 #1671，见 `SYSTEM_STATUS.md` 6.29）**，手表不用改 | 会调工具的实时语音模型拿到 `agent_do` / `agent_status` / `agent_stop`；不会调工具的由智能体旁听转写判断要不要做 |
 
 第三节是**任何一台别家生态的设备**（平板、车机、家居面板、别家手表……）接进来要做的同一套事 —— 安卓和手表只是其中两种。
 
@@ -204,8 +204,10 @@ put("approvals", true) // 收得到 decision_request、会经 human_input 回(�
   的源码历史里一次都没连过这三条，一直只连 `/ws/device/{device_id}`（安卓 `AppSettings.CANONICAL_WS_DEVICE_PATH_TEMPLATE`）；安卓读配置发现时期望 `ws_paths`
   是对象、服务端给的是列表，所以那份列表里的旧路径从没被用上。**两边什么都不用改。** 配置发现现在只给 `/ws/device/{id}`，`ws_paths_compat` 键留着、给空表。
   守着的测试：`tests/test_retired_device_ingress_stays_retired.py`。
-- **X2 手表通话时智能体动手**：通话走 provider 的实时语音会话，没接智能体的工具。要接得先定用哪家实时语音（OpenAI realtime / Gemini live 的函数调用协议不同），
-  然后把函数调用桥到 `handle_request(source="wear_call")`。
+- **X2 手表通话时智能体动手 —— 已做（中心这边，V2 #1671，`core/voice_call_agent.py`，见 `SYSTEM_STATUS.md` 6.29）**：接话的实时语音模型负责说，
+  中心智能体负责做（同一套工具与权限）。会调工具的（OpenAI realtime、Gemini live）在会话里拿到 `agent_do(what)` / `agent_status()` / `agent_stop(task_id?)`，
+  事情交给 `handle_request(source="device_call")` 在后台做、做完插一条【回报】；不会调工具的（阶跃、本机全模态）由智能体旁听转写、快档模型判要不要做。
+  **手表什么都不用改**：通话本来就走中心的实时语音会话。
 
 ## 五、做完之后怎么验
 

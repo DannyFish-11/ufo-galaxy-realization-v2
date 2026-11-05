@@ -219,83 +219,28 @@ class DeviceExecutionProfile(BaseModel):
 # Profile builders / factories
 # ---------------------------------------------------------------------------
 
-#: Capability names that strongly indicate a rich (agent_runtime-capable) device.
-_RICH_CAPABILITY_HINTS: frozenset = frozenset(
-    {
-        "screen",
-        "touch",
-        "keyboard",
-        "camera",
-        "microphone",
-        "display",
-        "agent_runtime",
-        "execute_agent",
-    }
-)
-
-#: Device-type strings that indicate a thin (command_only) device.
-_THIN_DEVICE_TYPES: frozenset = frozenset(
-    {
-        "drone",
-        "iot",
-        "sensor",
-        "embedded",
-        "kiosk",
-        "mcu",
-        "rpi",
-        "raspberrypi",
-        "arduino",
-    }
-)
-
-#: Device-type strings that indicate a rich device.
-_RICH_DEVICE_TYPES: frozenset = frozenset(
-    {
-        "android",
-        "ios",
-        "windows",
-        "macos",
-        "linux",
-        "phone",
-        "tablet",
-        "desktop",
-        "laptop",
-        "pc",
-    }
-)
+#: 设备声明「能跑 Agent」时报的能力名(``autonomous_goal_execution`` 是手机 App 报能力时用的那个)。
+_AGENT_DECLARATIONS: frozenset = frozenset({"agent_runtime", "execute_agent", "autonomous_goal_execution"})
+#: 设备声明「只收单条命令」时报的能力名。
+_COMMAND_ONLY_DECLARATION = "command_only"
 
 
 def _classify_from_info(
     capabilities: List[str],
     device_type: Optional[str],
 ) -> DeviceProfileClass:
-    """Heuristically classify a device as rich/thin/unknown.
+    """按设备自己的声明把它归为 rich / thin / unknown。
 
-    Priority order:
-    1. Explicit ``"agent_runtime"`` or ``"execute_agent"`` capability → rich.
-    2. Device-type label in ``_THIN_DEVICE_TYPES`` → thin.
-    3. Device-type label in ``_RICH_DEVICE_TYPES`` → rich.
-    4. Any capability from ``_RICH_CAPABILITY_HINTS`` → rich.
-    5. Default → unknown.
+    只看它报的能力里有没有明说:能跑 Agent(``_AGENT_DECLARATIONS``)→ rich;只收单条命令
+    (``command_only``)→ thin;都没说 → unknown(调度里一律放行)。**不看设备类型**,也不从「有屏幕、有摄像头」
+    去猜它能不能跑 Agent —— 此前按类型名单(手机、电脑算 rich,无人机、传感器算 thin)和能力关键词推断。
+    ``device_type`` 留在签名里只为兼容调用方。
     """
     cap_set = {c.lower() for c in capabilities}
-
-    # Explicit agent capability is the strongest signal
-    if cap_set & {"agent_runtime", "execute_agent"}:
+    if cap_set & _AGENT_DECLARATIONS:
         return DeviceProfileClass.rich
-
-    # Device-type based classification
-    if device_type:
-        dt_lower = device_type.lower()
-        if dt_lower in _THIN_DEVICE_TYPES:
-            return DeviceProfileClass.thin
-        if dt_lower in _RICH_DEVICE_TYPES:
-            return DeviceProfileClass.rich
-
-    # Capability-based heuristic
-    if cap_set & _RICH_CAPABILITY_HINTS:
-        return DeviceProfileClass.rich
-
+    if _COMMAND_ONLY_DECLARATION in cap_set:
+        return DeviceProfileClass.thin
     return DeviceProfileClass.unknown
 
 

@@ -1317,10 +1317,12 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin, _presence_line.RuntimeOri
         await _live_check.attach_revisions(result, desktop=rsession.desktop_originated)
         _live_check.late_check(result, session_id=conversation_session_id, source=source)  # 联网核在后台,事后挂勘误
         _live_check.close_turn(_turn_token)
+        # 实时语音(voice_duplex)交过来的也不念:结果作为【回报】插回实时会话,由那个声音说
+        # (core.voice_call_agent),这里再念一遍就是两个声音。
         try:
             from core.speech_output import speak_response
 
-            if source != "ambient" and rsession.desktop_originated:
+            if source not in ("ambient", "voice_duplex") and rsession.desktop_originated:
                 speak_response(result.get("response_spoken") or result.get("response", ""), source=source)
         except Exception:  # noqa: BLE001
             pass

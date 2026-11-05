@@ -67,23 +67,19 @@ def _scopes_for_trust(trust: str) -> List[str]:
     return list(_TRUST_SCOPES.get(str(trust).lower(), _TRUST_SCOPES["unknown"]))
 
 
-#: 哪些设备要在配对时拿"进 tailnet 的一次性钥匙"。
+#: 配对时客户端自己声明它会怎么进 tailnet(``tailnet`` 字段),声明了的才发一次性钥匙 —— 看它说的,
+#: 不看它是什么类型的设备:
 #:
-#: 只有手表:Wear OS 装不了任何 VpnService 类 App(含 Tailscale),App 里嵌的是一个
-#: 用户态 tailnet 进程,它第一次加入要这把钥匙。手机装得了 Tailscale 官方 App,
-#: 自己登录即可 —— 给它发钥匙等于多发一份没人用、却能进 tailnet 的凭证。
-_EMBEDDED_TAILNET_DEVICE_TYPES = frozenset({"wearos"})
-#: 电脑:配对时同样给一把进网钥匙,由客户端自己用系统里的 tailscale 加入 —— 笔记本
-#: 带出门后还能连回来,不用人另外去签钥匙、抄命令。
-_COMPUTER_TAILNET_DEVICE_TYPES = frozenset(
-    {"windows_laptop", "windows_desktop", "macos_laptop", "macos_desktop", "linux_desktop", "linux_laptop"}
-)
-_TAILNET_AT_PAIRING_DEVICE_TYPES = _EMBEDDED_TAILNET_DEVICE_TYPES | _COMPUTER_TAILNET_DEVICE_TYPES
+#: * ``embedded`` —— App 里嵌了一个用户态 tailnet 进程(比如装不了 VpnService 类 App 的系统),第一次加入要这把钥匙;
+#: * ``system`` —— 客户端用系统里的 tailscale 自己加入(电脑上的 device_client),带出门后还能连回来。
+#:
+#: 没声明的(比如自己装 Tailscale 官方 App 登录的)不发 —— 发了就是多一份没人用、却能进 tailnet 的凭证。
+_TAILNET_MODES = frozenset({"embedded", "system"})
 
 
-async def _tailnet_join_for(device_type: str, device_id: str = "") -> Dict[str, object]:
-    """配对响应里关于"进 tailnet"的那两个字段。签不出来不影响配对本身。"""
-    if str(device_type).lower() not in _TAILNET_AT_PAIRING_DEVICE_TYPES:
+async def _tailnet_join_for(tailnet: str, device_id: str = "") -> Dict[str, object]:
+    """配对响应里关于"进 tailnet"的那两个字段。``tailnet`` 是客户端声明的进网方式。签不出来不影响配对本身。"""
+    if str(tailnet or "").lower() not in _TAILNET_MODES:
         return {}
     from core.headscale_join import JoinUnavailable, issue_join_key, join_status
 
@@ -94,14 +90,14 @@ async def _tailnet_join_for(device_type: str, device_id: str = "") -> Dict[str, 
 
         blocked = await asyncio.to_thread(desktop_gate)
         if blocked:
-            logger.warning("配对成功,但没给 %s 签发 tailnet 钥匙:%s", device_type, blocked["how_to_fix"])
+            logger.warning("配对成功,但没给 %s 签发 tailnet 钥匙:%s", device_id, blocked["how_to_fix"])
             return {"tailnet_join": None, "tailnet_join_unavailable": blocked}
     try:
         grant = await asyncio.to_thread(issue_join_key)
     except JoinUnavailable as exc:
         # 明确写出为什么没有、怎么修 —— 静默少一个字段会表现成"出门连不上",
         # 而没人知道原因在这里。
-        logger.warning("配对成功,但没能给 %s 签发 tailnet 钥匙:%s", device_type, exc.reason)
+        logger.warning("配对成功,但没能给 %s 签发 tailnet 钥匙:%s", device_id, exc.reason)
         return {"tailnet_join": None, "tailnet_join_unavailable": exc.to_dict()}
     # 记下"给这台设备签了哪把钥匙" —— 之后设备列表凭它把 headscale 里的节点认回来,
     # 移除设备时也凭它把节点踢出 tailnet。
@@ -152,6 +148,8 @@ class ClaimRequest(BaseModel):
     device_id: str
     name: str = ""
     device_type: str = "unknown"
+    #: 它会怎么进 tailnet:``embedded`` / ``system``;不进(或自己装 Tailscale App 登录)就不填。见 ``_TAILNET_MODES``。
+    tailnet: str = ""
     capabilities: Optional[List[str]] = None
     #: 接纳时赋予的信任级别,默认 ask(保守:先接进来,动作仍要人确认)
     trust: str = "ask"
@@ -312,8 +310,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     # 但必须让调用方知道它没拿到令牌,否则会以为拿到了。
                     logger.warning("配对成功但能力令牌签发失败:device_id=%s: %s", subject, exc)
 
-            # 手表出门直连要靠这把钥匙。被拒(blocked,无作用域)的设备不给。
-            tailnet_fields = await _tailnet_join_for(req.device_type, subject) if scopes else {}
+            # 声明了自己进 tailnet 的设备,出门直连要靠这把钥匙。被拒(blocked,无作用域)的设备不给。
+            tailnet_fields = await _tailnet_join_for(req.tailnet, subject) if scopes else {}
 
             try:
                 from core.device_onboarding.conversation import note_paired

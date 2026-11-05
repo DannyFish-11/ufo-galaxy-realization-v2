@@ -180,7 +180,7 @@ def test_with_a_watch_it_asks_there_and_says_so_in_the_conversation(env, monkeyp
     cid = _candidate()
     out = _in_turn(_turn("把 nas 接进来"), "devices__join", {"candidate_id": cid})
     assert out["success"] and _udm_has(_SERIAL_ID)
-    assert f"我在手表上问你了:要把「{_SERIAL_NAME}」接入为设备吗?" in env.said
+    assert f"我在设备上问你了:要把「{_SERIAL_NAME}」接入为设备吗?" in env.said
 
 
 @pytest.mark.parametrize(

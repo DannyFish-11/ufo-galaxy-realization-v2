@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "galaxy:device_state/1",
+  "title": "设备状态 device_state/1",
+  "description": "设备此刻的状态,跟着心跳帧走(payload.state)。设计见 docs/DEVICE_SELF_DESCRIPTION_DESIGN.md 3.5;中心读入在 core/device_state.py,手机、手表用 shared-protocol 的 DeviceState.kt 拼。每一份都是此刻的全部状态:没有的键就是设备现在不知道。只许这几个键 —— 心率、位置这类原始信号不出设备。中心读入是宽松的,这份 schema 给三边的契约测试用,所以写得严。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "battery": {"type": "number", "minimum": 0, "maximum": 1, "description": "电量,0 到 1"},
+    "charging": {"type": "boolean"},
+    "screen_on": {"type": "boolean"},
+    "worn": {"type": "boolean", "description": "戴在身上"},
+    "in_call": {"type": "boolean", "description": "正在通话"},
+    "interruptible": {
+      "enum": ["blocked", "busy", "neutral", "free"],
+      "description": "设备自己判断的现在能不能打扰人:明确别打扰 / 偏忙 / 说不好 / 可以。判断不了就不报这个键"
+    },
+    "note": {"type": "string", "minLength": 1, "maxLength": 120, "description": "设备想让模型知道、又不属于上面几项的,一句话"}
+  }
+}

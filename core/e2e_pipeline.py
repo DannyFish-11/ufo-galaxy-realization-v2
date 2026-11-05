@@ -34,6 +34,26 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("Galaxy.E2EPipeline")
 
 
+def _match_member(targets: Any) -> str:
+    """解析出的目标 → 名册里的设备 id(按 id 或设备自己报的名字对,不分大小写);对不上返回空串。"""
+    names = [str(t).strip().lower() for t in (targets or []) if isinstance(t, str) and str(t).strip()]
+    if not names:
+        return ""
+    try:
+        from core.unified.device_manager import get_unified_device_manager
+
+        devices = list(get_unified_device_manager().list_devices())
+    except Exception:  # noqa: BLE001 — 名册不可用就不指定设备
+        return ""
+    for name in names:
+        for d in devices:
+            did = str(getattr(d, "device_id", "") or "")
+            label = str(getattr(d, "device_name", "") or "")
+            if name in (did.lower(), label.lower()):
+                return did
+    return ""
+
+
 class EndToEndPipeline:
     """全链路编排器"""
 
@@ -123,11 +143,9 @@ class EndToEndPipeline:
                     "params": parsed.params,
                     "confidence": parsed.confidence,
                 }
-                # 提取目标设备
-                for t in parsed.targets:
-                    if isinstance(t, str) and any(kw in t for kw in ["phone", "手机", "平板", "tablet", "pc", "电脑"]):
-                        target_device = t
-                        break
+                # 提取目标设备:解析出的目标里,对得上名册里某台设备(id 或它报的名字)的那一个 ——
+                # 不按「手机 / 电脑」这类词认设备类型
+                target_device = _match_member(parsed.targets)
         except Exception as e:
             logger.debug(f"意图解析异常，使用关键词匹配: {e}")
             # 关键词匹配兜底

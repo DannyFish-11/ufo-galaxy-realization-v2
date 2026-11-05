@@ -181,12 +181,16 @@ async def test_a_remark_held_back_by_the_user_is_not_charged(spoken):
     assert loop.status()["budget"]["speak"]["used"] == 0
 
 
-async def test_a_remark_the_watch_blocked_is_not_a_budget_suppression(spoken):
+async def test_a_remark_a_device_blocked_is_not_a_budget_suppression(spoken):
     loop = _loop(Scripted(_speak()), governor=AmbientGovernor(_limits(speak_per_hour=1)))
-    with patch("core.ambient_attention_loop._interruptibility_blocked", lambda: True):
+    with (
+        patch("core.ambient_attention_loop._interruptibility_blocked", lambda: True),
+        patch("core.ambient_attention_loop._blocking_source", lambda: "Galaxy Watch"),
+    ):
         decision = await loop.tick()
 
-    assert decision.action == AmbientAction.SILENT and "手表" in decision.rationale
+    # 理由里写明是哪台设备说的,不写死设备类型
+    assert decision.action == AmbientAction.SILENT and "Galaxy Watch" in decision.rationale
     assert loop.status()["budget"]["speak"]["suppressed"] == 0 and loop.status()["incidents"] == []
 
 

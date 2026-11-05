@@ -116,7 +116,10 @@ def test_a_chromecast_nearby_is_a_candidate_not_a_device(plane):
 def test_a_paired_phone_announcing_itself_is_recognised_not_duplicated(plane):
     from core.lan_discovery import LanDiscovery
 
-    _udm().register_device_from_dict("phone-1", {"device_type": "android_phone", "transport": "websocket"})
+    # 和真手机一样登记时自报 join_runtime(是不是主体看设备自己说的,不看类型)
+    _udm().register_device_from_dict(
+        "phone-1", {"device_type": "android_phone", "transport": "websocket", "source_runtime_posture": "join_runtime"}
+    )
     lan = LanDiscovery()
     lan.ingest_service(
         "_galaxy-aip3._tcp.", "phone-1._galaxy-aip3._tcp.", "192.168.1.30", 19421, {"device_id": "phone-1"}
@@ -437,7 +440,10 @@ def test_matter_code_is_sent_to_home_assistant_over_websocket(plane, ha):
 def test_overview_groups_by_role(plane):
     from core.ha_bridge import HABridge
 
-    _udm().register_device_from_dict("phone-1", {"device_type": "Android_Agent", "transport": "websocket"})
+    # 主体看设备自己说的(登记时报 join_runtime),不看类型
+    _udm().register_device_from_dict(
+        "phone-1", {"device_type": "Android_Agent", "transport": "websocket", "source_runtime_posture": "join_runtime"}
+    )
     _udm().register_device_from_dict("watch-1", {"device_type": "wearos", "transport": "websocket"})
     HABridge(url="http://ha.local:8123", token="t")._mirror_entity(
         {"entity_id": "switch.fan", "state": "on", "attributes": {"friendly_name": "风扇"}}

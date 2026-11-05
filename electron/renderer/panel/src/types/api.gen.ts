@@ -1098,6 +1098,7 @@ export interface ClaimRequest {
   "link"?: string | null;
   "name"?: string;
   "note"?: string;
+  "tailnet"?: string;
   "token_ttl_s"?: number;
   "trust"?: string;
 }

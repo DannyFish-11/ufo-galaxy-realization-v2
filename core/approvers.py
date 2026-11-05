@@ -22,6 +22,10 @@ from typing import Any, Dict, Optional
 
 #: 设备声明自己能回答批准时用的字段名
 DECLARATION = "approvals"
+#: 同一句声明的另一个名字:设备自述(``device_self/1``)``declares.answers_decisions`` 展开回顶层后就叫它
+#: (``core/device_self.py``),新版手机、手表都发。两个名字说的是同一件事 —— 收得到 ``decision_request``、
+#: 会经 ``human_input`` 回 —— 只认一处,免得同一台设备在两张表里各算各的。``approvals`` 写了就以它为准。
+ALIASES = ("answers_decisions",)
 #: 存进设备登记（UDM）元数据里的那一位
 METADATA_FLAG = "answers_approvals"
 
@@ -44,9 +48,10 @@ def declared(frame: Dict[str, Any]) -> Optional[bool]:
     payload = frame.get("payload") if isinstance(frame.get("payload"), dict) else {}
     meta = frame.get("metadata") if isinstance(frame.get("metadata"), dict) else {}
     pmeta = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
-    for source in (frame, payload, meta, pmeta):
-        if DECLARATION in source:
-            return _truthy(source.get(DECLARATION))
+    for key in (DECLARATION, *ALIASES):
+        for source in (frame, payload, meta, pmeta):
+            if key in source:
+                return _truthy(source.get(key))
     return None
 
 
@@ -131,9 +136,13 @@ def approval_capability(device_id: str, device_type: str = "") -> Optional[bool]
     """
     if _not_yet_approved(device_id):
         return False
-    flag = _metadata(device_id).get(METADATA_FLAG)
+    meta = _metadata(device_id)
+    flag = meta.get(METADATA_FLAG)
     if isinstance(flag, bool):
         return flag
+    if any(meta.get(key) is True for key in ALIASES):
+        # 自述里声明过(core/device_declarations 每次报能力记下的)。它记的 False 也可能只是「没说」,不当成拒绝
+        return True
     t = (device_type or _raw_type(device_id)).strip().lower()
     if not t or t == "unknown":
         return None
@@ -145,4 +154,12 @@ def answers_approvals(device_id: str, device_type: str = "") -> bool:
     return approval_capability(device_id, device_type) is True
 
 
-__all__ = ["DECLARATION", "METADATA_FLAG", "answers_approvals", "approval_capability", "declared", "remember"]
+__all__ = [
+    "ALIASES",
+    "DECLARATION",
+    "METADATA_FLAG",
+    "answers_approvals",
+    "approval_capability",
+    "declared",
+    "remember",
+]

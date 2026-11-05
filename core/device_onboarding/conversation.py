@@ -35,7 +35,7 @@ from typing import Any, Dict, Optional, Tuple
 logger = logging.getLogger("Galaxy.Onboarding.Conversation")
 
 #: 算作「人在说话」的回合来源(``DesktopPresenceRuntime.handle_request`` 的 ``source``)。
-HUMAN_REQUEST_SOURCES = frozenset({"chat", "voice", "voice_duplex", "wear_voice", "wear_decision", "phone_chat"})
+HUMAN_REQUEST_SOURCES = frozenset({"chat", "voice", "voice_duplex", "device_voice", "device_decision", "device_chat"})
 
 #: 对话里的待确认,多久没人答就作废。
 CONFIRM_TTL_S = 600.0
@@ -279,8 +279,7 @@ async def note_paired(device_id: str, name: str, device_type: str = "") -> None:
     label = name or device_id
     with _lock:
         _just_paired[device_id] = (label, time.time())
-    kind = {"windows_laptop": "笔记本", "windows_desktop": "电脑", "wearos": "手表"}.get(device_type, "设备")
-    announce_soon(f"{kind}「{label}」配对好了,正在连过来。")
+    announce_soon(f"「{label}」配对好了,正在连过来。")
 
 
 async def note_connected(device_id: str) -> None:

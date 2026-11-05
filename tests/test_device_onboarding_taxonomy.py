@@ -97,7 +97,8 @@ def test_ws_router_registration_keeps_the_fine_type(udm):
     d = udm.register_device_from_dict("p1", {"device_type": "android_phone", "capabilities": ["gui_read", "tap"]})
     assert d.device_type == "android"  # 以前:unknown
     assert d.aip_device_type == "android_phone"
-    assert d.execution_model == tx.FULL_RUNTIME_HOST
+    # 是不是完整运行时看设备自己说的(join_runtime),不看类型:没装 App、由 ADB 驱动的安卓设备不是
+    assert d.execution_model != tx.FULL_RUNTIME_HOST
     assert _resolve(d) == "Node_33_ADB"  # 没有 App 的安卓设备由 ADB 驱动
 
 

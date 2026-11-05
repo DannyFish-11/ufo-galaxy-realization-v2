@@ -9,14 +9,14 @@ MCP/技能/节点;资源表里从没放进过设备。这里不把几百个 ``de
     devices__ignore          不再提示某个候选
     devices__remove          移除成员(该收回的都收回)
     devices__invoke          调某台设备的一个动作(按它是原生/桥接/驱动节点/MCP 驱动分别路由)
-    devices__delegate        把一整段目标交给装了桥接 Agent 的设备(手机本地循环)去做,等它的结果
+    devices__delegate        把一整段目标交给装了桥接 Agent 的设备(它自己的本地循环)去做,等它的结果
     devices__plan            多步计划:每步用哪台设备、依赖哪几步 → 分层执行(同层并行、同一台设备串行)
-    devices__invite          邀请一台新设备(手机/手表:配对码;笔记本:配对码 + 一条命令;worker:进网 + 启动命令)
+    devices__invite          邀请一台新设备,按那台设备上跑什么分:App(配对码)/ 电脑客户端、载体(配对码 + 一条命令)/ worker
     devices__acquire_driver  没有接入路径的候选:装一个 MCP 驱动(GitHub),或让模型写一个
     devices__bind_driver     把某个 MCP 工具认作这个候选的驱动,接入为成员
 
 哪些步骤要人:
-* 同意类(接入 edge worker、确认 HA 集成、移除成员)—— 在手表上问(fail-closed),
+* 同意类(接入 edge worker、确认 HA 集成、移除成员)—— 在声明能回答提问的设备上问(fail-closed),没有就在对话里问,
   除非 ``GALAXY_ONBOARDING_AUTO=approve``(移除永远要问);
 * 物理码、设备上确认、执行命令 —— 智能体做不了,如实返回"要人做什么";
 * 生成驱动代码 —— 永远要问。
@@ -28,11 +28,11 @@ import logging
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from core.device_boundaries import one_at_a_time
 from core.device_onboarding.gateway_address import gateway_http_base
 from core.device_onboarding.models import CandidateStatus, HumanStep
 from core.device_onboarding.service import _auto_allows, get_onboarding_service, onboarding_enabled
 from core.device_onboarding.taxonomy import is_native_transport
-from core.device_queue import run_on_device
 
 logger = logging.getLogger("Galaxy.Onboarding.AgentTools")
 
@@ -51,13 +51,18 @@ def _fn(name: str, description: str, properties: Dict[str, Any], required: Optio
 DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
     _fn(
         "devices__list",
-        "List this system's devices. Each member comes as one card: what it is (name, type, form: watch / phone / "
-        "computer / carrier / home), what it can do (each action it reported, with a one-line 'does'), how it is now "
-        "(online, battery, network path, busy, and for a watch whether the wearer can be interrupted), whether it can "
-        "take a dispatched agent (can_take_agent: phones and agent carriers yes; watches and hands-and-eyes computers "
-        "no), and what it did recently with what result. You decide which device does what; only members that are "
-        "online can be given work. Also lists candidates discovered nearby that are NOT members yet and what joining "
-        "each would take.",
+        "List this system's devices. Each member comes as one card, taken from what the device itself reported: what "
+        "it is (name, kind, and in its own words 'about'), what it can do (each action it reported, with a one-line "
+        "'does' and, when it said so, what doing it means: 'effect' read / notify / act / send / danger, and "
+        "'needs_human' when a person must tap on the device), what it cannot do right now and why ('unavailable'), "
+        "how it is now ('status': online, network path and busy are what the center sees; battery, charging, "
+        "screen_on, worn, in_call, interruptible (blocked / busy / neutral / free) and a 'note' are what the device "
+        "itself reported, and a key it did not report is simply unknown), whether it can take a dispatched agent "
+        "(can_take_agent), whether a question can be put to "
+        "the person on it (answers_decisions), and what it did recently with what result. To show the person a line, "
+        "use a device's action whose effect is 'notify'. You decide which device does what from these cards; only "
+        "members that are online can be given work. Also lists candidates discovered nearby that are NOT members yet "
+        "and what joining each would take.",
         {"include_ignored": {"type": "boolean", "description": "Also list candidates the user ignored."}},
     ),
     _fn(
@@ -77,7 +82,8 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
     _fn("devices__ignore", "Stop suggesting a candidate.", {"candidate_id": {"type": "string"}}, ["candidate_id"]),
     _fn(
         "devices__remove",
-        "Remove a member: forget it, revoke its network identity and pairing. Asks the user on their watch first.",
+        "Remove a member: forget it, revoke its network identity and pairing. Asks the user first (on a device that "
+        "can answer questions, otherwise in the conversation).",
         {"device_id": {"type": "string"}},
         ["device_id"],
     ),
@@ -94,12 +100,11 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
     ),
     _fn(
         "devices__delegate",
-        "Hand a whole goal to a device that runs its own agent (can_take_agent and agent_installed on its card: a "
-        "phone, or an agent carrier on another computer / server): it plans and carries it out locally, reports "
-        "progress, and returns the result. Use this for multi-step work on that device; use devices__invoke for a "
-        "single action. Constraints are passed along as-is (e.g. 'do not pay'); a phone still asks its user before "
-        "sending messages, calling or paying. If you already know the exact actions, give them as steps and the "
-        "device runs them in order without planning.",
+        "Hand a whole goal to a device that runs its own agent (can_take_agent and agent_installed on its card): it "
+        "plans and carries it out locally, reports progress, and returns the result. Use this for multi-step work on "
+        "that device; use devices__invoke for a single action. Constraints are passed along as-is (e.g. 'do not "
+        "pay'); the device still asks its user before sending messages, calling or paying. If you already know the "
+        "exact actions, give them as steps and the device runs them in order without planning.",
         {
             "device_id": {"type": "string"},
             "goal": {"type": "string", "description": "What to get done, in plain words"},
@@ -155,15 +160,21 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
     ),
     _fn(
         "devices__invite",
-        "Invite a new device the user wants to add. phone/watch: returns a one-time pairing code to enter in the "
-        "Galaxy app. laptop: a Windows, macOS or Linux computer the user wants you to operate (screen, mouse, "
-        "keyboard) — returns one command with a pairing code to run on it; it finds this system on the LAN, joins the "
-        "private network, starts on login, and you will be told in the conversation when it connects. carrier: "
-        "another computer, Linux server or cloud host that takes an agent from you and carries out whole goals there "
-        "(files in its own work folder, code only in a sandbox) — returns a pairing command; once it connects you "
-        "can devices__delegate to it. worker: a headless machine that only runs code jobs — it joins the message "
-        "bus and starts taking jobs on its own, so it needs no onboarding and does not appear in the device list.",
-        {"kind": {"type": "string", "enum": ["phone", "watch", "laptop", "carrier", "worker"]}},
+        "Invite a new device the user wants to add. kind says what will run on it. app: it runs the Galaxy app — "
+        "returns a one-time pairing code to enter in the app; with network=true also a one-time key and the steps "
+        "to join the private network through the Tailscale app, for a device that should reach this system away "
+        "from home and installs Tailscale itself. client: a Windows, macOS or Linux computer the user wants you to "
+        "operate (screen, mouse, keyboard) — returns one command with a pairing code to run on it; it finds this "
+        "system on the LAN, joins the private network, starts on login, and you will be told in the conversation "
+        "when it connects. carrier: a computer, Linux server or cloud host that takes an agent from you and carries "
+        "out whole goals there (files in its own work folder, code only in a sandbox) — returns a pairing command; "
+        "once it connects you can devices__delegate to it. worker: a headless machine that only runs code jobs — it "
+        "joins the message bus and starts taking jobs on its own, so it needs no onboarding and does not appear in "
+        "the device list.",
+        {
+            "kind": {"type": "string", "enum": ["app", "client", "carrier", "worker"]},
+            "network": {"type": "boolean", "description": "app only: also return the private-network join steps"},
+        },
         ["kind"],
     ),
     _fn(
@@ -203,7 +214,7 @@ async def _ask(what: str, session_id: str) -> Optional[Dict[str, Any]]:
     """问人要不要做。批准返回 None;否则返回该交回给智能体的结果。
 
     * 这件事已经在对话里问过 → 按用户这一回合的原话判(规则见 conversation.py);
-    * 手表/手机连着 → 在手表上问(阻塞等回答,fail-closed),同时在对话里说一声问了什么;
+    * 有声明能回答提问的设备在线 → 在那上面问(阻塞等回答,fail-closed),同时在对话里说一声问了什么;
     * 都没有 → 在对话里问:本次不执行,交回一句要问用户的话,用户答了之后原样再调一次。
     """
     from core.device_onboarding.conversation import announce_soon, confirm_in_conversation, is_pending
@@ -227,14 +238,14 @@ async def _ask(what: str, session_id: str) -> Optional[Dict[str, Any]]:
         from core.interaction.pending_decision_registry import _discover_target_devices
 
         watch_up = bool(await _discover_target_devices())
-    except Exception:  # noqa: BLE001 — 探不到手表就在对话里问,不因此放行
+    except Exception:  # noqa: BLE001 — 探不到能问的设备就在对话里问,不因此放行
         watch_up = False
     if not watch_up:
         return _in_conversation()
 
     from core.interaction.high_risk_confirmation import confirm_high_risk_tool
 
-    announce_soon(f"我在手表上问你了:要{what}吗?")
+    announce_soon(f"我在设备上问你了:要{what}吗?")
     outcome = await confirm_high_risk_tool(tool_name=what, risk_level="设备接入", session_id=session_id)
     return None if outcome.approved else {"success": False, "error": f"没有执行:{outcome.reason}"}
 
@@ -359,23 +370,32 @@ BRIDGE_INVOKERS: Dict[str, Callable[[Any, str, Dict[str, Any], str], Awaitable[D
 
 
 async def _invoke(args: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+    from core.device_boundaries import member
     from core.unified.device_manager import get_unified_device_manager
 
     did = str(args.get("device_id") or "")
     action = str(args.get("action") or "").strip()
     params = dict(args.get("params") or {})
+    # 边界 1(core/device_boundaries.py):在名册里、连着、开了准入的批准过 —— 不在线的设备不该先去问人要不要做
+    stop = member(did)
+    if stop:
+        return stop
     d = get_unified_device_manager().get_device(did)
-    if d is None:
-        return {"success": False, "error": f"没有这个成员:{did}(候选要先 devices__join)"}
     if not action:
         return {"success": False, "error": "需要 action"}
     for prefix, invoker in BRIDGE_INVOKERS.items():
         if d.bridge_id.startswith(prefix):
             return await invoker(d, action, params, session_id)
     if is_native_transport(d.transport) or not d.transport:
-        # 讲 AIP 的设备:走规范派发链(权限门在里面)。它在名册里就是自己加入的成员 ——
+        # 讲 AIP 的设备:先过边界(参数合不合设备说的格式、自发打扰的额度、按动作的 effect 与自治档位要不要
+        # 先问人,core/device_boundaries.gate),再走规范派发链。它在名册里就是自己加入的成员 ——
         # 不看这台电脑的「跨设备」开关(那个开关只管电脑自己进不进网络)。
         from core.capabilities.canonical_dispatcher import get_canonical_dispatcher
+        from core.device_boundaries import gate
+
+        stop = await gate(did, action, params, session_id)
+        if stop:
+            return stop
 
         r = await get_canonical_dispatcher().dispatch(f"device__{did}__{action}", params, session_id=session_id)
         return r.as_legacy_dict()
@@ -394,12 +414,19 @@ async def _invoke(args: Dict[str, Any], session_id: str) -> Dict[str, Any]:
 # ── invite ───────────────────────────────────────────────────────────────────────
 
 
+#: 早先按设备种类起的名字,照旧认:分的其实是那台设备上跑什么。
+_INVITE_ALIASES = {"phone": "app", "watch": "app", "laptop": "client", "computer": "client"}
+
+
 def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
     kind = str(args.get("kind") or "").lower()
+    kind = _INVITE_ALIASES.get(kind, kind)
     from core.agent_card import build_local_card, get_pairing_code_registry, to_link
     from core.headscale_join import JoinUnavailable, issue_join_key
 
-    if kind in ("phone", "watch"):
+    if kind == "app":
+        # 跑 Galaxy App 的设备:在 App 的接入页输配对码。App 自带进网能力的(配对时声明 tailnet),配对那一下
+        # 自己拿钥匙;要靠系统里的 Tailscale App 进网的,智能体要了 network 才另给一把(不要不发,免得多一张凭证)。
         link = to_link(build_local_card())
         code, expires_at = get_pairing_code_registry().issue(link)
         out: Dict[str, Any] = {
@@ -408,10 +435,9 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
             "code": code,
             "link": link,
             "expires_at": expires_at,
-            "tell_user": f"在{'手机' if kind == 'phone' else '手表'}的 Galaxy App 接入页输入配对码 {code}"
-            + ("(手表配对时会自动进自建内网)" if kind == "watch" else "(10 分钟内有效)"),
+            "tell_user": f"在那台设备的 Galaxy App 接入页输入配对码 {code}(10 分钟内有效)",
         }
-        if kind == "phone":
+        if args.get("network"):
             try:
                 from core.tailnet_self_join import join_command_for
 
@@ -419,7 +445,7 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
             except JoinUnavailable as exc:
                 out["network"] = {"skipped": exc.reason, "how_to_fix": exc.how_to_fix}
         return out
-    if kind in ("laptop", "computer"):
+    if kind == "client":
         # 电脑作为「相对主体」接进来:和手机同一条配对链。Windows / macOS / Linux 同一条命令
         # (device_client:连接层共用,本机怎么动手由执行插件决定)。同一局域网里客户端自己
         # 找主脑,所以短命令只带配对码;找不到时用带地址的那条。
@@ -489,7 +515,7 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
             "再在它上面的本仓库副本里执行第二条(启动执行 worker)。起来之后它自己上消息总线、"
             "开始领计算任务 —— 不用再接入一次。它是干活的机器,不进设备列表",
         }
-    return {"success": False, "error": "kind 只能是 phone / watch / laptop / carrier / worker"}
+    return {"success": False, "error": "kind 只能是 app / client / carrier / worker"}
 
 
 # ── 驱动:获取与绑定 ─────────────────────────────────────────────────────────────
@@ -582,14 +608,14 @@ async def dispatch_devices_tool(action: str, arguments: Dict[str, Any], *, sessi
         if action == "remove":
             return await _remove(args, session_id)
         if action == "invoke":
-            # 同一台设备一次只做一件事(每台设备一个队列),不同设备照样并行
-            return await run_on_device(str(args.get("device_id") or ""), lambda: _invoke(args, session_id))
+            # 边界 5:同一台设备一次只做一件事(每台设备一个队列),不同设备照样并行;一定有结果
+            return await one_at_a_time(str(args.get("device_id") or ""), lambda: _invoke(args, session_id))
         if action == "delegate":
             from core.phone_bridge import DEFAULT_DELEGATE_TIMEOUT_S, delegate
 
             device_id = str(args.get("device_id") or "")
             timeout = float(args.get("timeout_s") or DEFAULT_DELEGATE_TIMEOUT_S)
-            return await run_on_device(
+            return await one_at_a_time(
                 device_id,
                 lambda: delegate(
                     device_id,

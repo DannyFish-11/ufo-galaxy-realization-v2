@@ -57,7 +57,7 @@ class ConfirmationLevel(str, Enum):
 
     NONE = "none"  # 无需确认
     VOICE = "voice"  # 语音确认
-    WATCH_BTN = "watch_btn"  # 手表按键确认
+    DEVICE_TAP = "device_tap"  # 在弹出的确认上点一下(发到声明能回答提问的设备,不看是什么设备)
     DUAL = "dual"  # 双重确认（语音+按键）
     FORBIDDEN = "forbidden"  # 完全禁止
 
@@ -351,31 +351,8 @@ def _create_failsafe_policy() -> SecurityPolicy:
     """创建失效保护策略 — 允许查询和低危操作，拒绝所有危险操作。"""
     failsafe_raw = {
         "policy_version": "failsafe-1.0",
-        "capability_boundaries": {
-            "wear_os": {
-                "allowed_categories": ["query"],
-                "denied_categories": ["*"],
-            },
-            "android": {
-                "allowed_categories": ["query", "light_control", "scene_trigger", "media_playback"],
-                "denied_categories": [
-                    "door_lock",
-                    "camera_control",
-                    "hvac_control",
-                    "appliance_power",
-                    "security_arm",
-                    "device_takeover",
-                ],
-            },
-            "tablet": {
-                "allowed_categories": ["query", "media_playback"],
-                "denied_categories": ["*"],
-            },
-            "windows": {
-                "allowed_categories": ["*"],
-                "denied_categories": [],
-            },
-        },
+        # 按设备类型的能力边界已删除(PR-SECURITY-V2,执行方早已不读);危险操作按命令本身判断,不按设备类型
+        "capability_boundaries": {},
         "dangerous_commands": {
             "_default": {
                 "confirmation_level": "voice",

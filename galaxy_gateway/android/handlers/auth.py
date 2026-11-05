@@ -41,8 +41,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_VALID_DEVICE_TYPES = frozenset({"android", "wearos", "windows", "desktop"})
-
 
 def _mask(value: str, keep: int = 4) -> str:
     """Return a log-safe masked form of a secret-ish string."""
@@ -79,15 +77,6 @@ async def handle_auth(bridge: "AndroidBridge", websocket: Any, message: Dict[str
             "auth_enforced": auth_enforced,
             **({"reason": reason} if reason else {}),
         }
-
-    if device_type and device_type not in _VALID_DEVICE_TYPES:
-        logger.warning(
-            "[WS:AUTH] unknown device_type=%r device_id=%s — continuing "
-            "(forward-compat: new platforms must not be locked out by the "
-            "auth surface)",
-            device_type,
-            _mask(device_id),
-        )
 
     try:
         from core.auth import is_auth_enabled

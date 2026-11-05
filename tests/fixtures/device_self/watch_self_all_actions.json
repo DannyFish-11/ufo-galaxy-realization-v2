@@ -1,0 +1,93 @@
+{
+  "schema": "device_self/1",
+  "name": "Galaxy Watch7",
+  "kind": "wearos",
+  "about": "戴在手腕上的手表。屏幕很小,适合看一两句话、点一下;抬腕就能看到、震一下就能察觉;有心率和计步传感器。",
+  "actions": [
+    {
+      "name": "notify",
+      "description": "跟戴表的人说一句话:弹一条通知(标题 + 正文),抬腕就能看到,也记进手表上的对话",
+      "effect": "notify",
+      "params": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "标题",
+            "maxLength": 60
+          },
+          "text": {
+            "type": "string",
+            "description": "正文",
+            "maxLength": 500
+          },
+          "reply_expected": {
+            "type": "boolean",
+            "description": "通知上带一个快速回复框"
+          },
+          "conversation_id": {
+            "type": "string",
+            "description": "归进哪一串对话(中心的会话号)"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "haptic",
+      "description": "让手表震一下提醒戴表的人(只用于提醒类)",
+      "effect": "notify",
+      "params": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "enum": [
+              "message_arrival",
+              "listening_start",
+              "task_done",
+              "decision_prompt",
+              "error"
+            ],
+            "description": "震动的样式;不给按「来消息」"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_status",
+      "description": "读手表的电量、是否在充电、和中心连着没有",
+      "effect": "read",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "heart_rate",
+      "description": "现测一次戴表人的心率(要几秒钟;表没戴好会测不出来),回每分钟多少下",
+      "effect": "read",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "steps",
+      "description": "读戴表人今天走了多少步,以及从几点开始算的",
+      "effect": "read",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "declares": {
+    "answers_decisions": true,
+    "shows_request_progress": false,
+    "hosts_agent": "",
+    "tailnet": "embedded"
+  }
+}

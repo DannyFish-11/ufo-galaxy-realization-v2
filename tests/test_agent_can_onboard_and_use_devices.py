@@ -116,19 +116,17 @@ def test_the_agent_is_offered_the_device_tools():
     names = {t["function"]["name"] for t in DEVICES_BUILTIN_TOOLS}
     assert {"devices__list", "devices__join", "devices__invoke", "devices__remove", "devices__invite"} <= names
     [invite] = [t for t in DEVICES_BUILTIN_TOOLS if t["function"]["name"] == "devices__invite"]
-    assert invite["function"]["parameters"]["properties"]["kind"]["enum"] == [
-        "phone",
-        "watch",
-        "laptop",
-        "carrier",
-        "worker",
-    ]
+    # 分的是那台设备上跑什么,不是设备是什么
+    assert invite["function"]["parameters"]["properties"]["kind"]["enum"] == ["app", "client", "carrier", "worker"]
     assert "tools.extend(devices_tools_for_agent())" in inspect.getsource(OpenClawd._collect_tools)
     assert '"devices__",' in inspect.getsource(OpenClawd._dispatch_tool_call)
 
 
 def test_list_shows_each_member_as_a_whole_card_and_candidates(env):
-    _udm().register_device_from_dict("phone-1", {"device_type": "Android_Agent", "transport": "websocket"})
+    # 能主动发起看设备自己说的(登记时报 join_runtime),不看类型
+    _udm().register_device_from_dict(
+        "phone-1", {"device_type": "Android_Agent", "transport": "websocket", "source_runtime_posture": "join_runtime"}
+    )
     _serial_candidate()
     out = _agent("devices__list", {})
     assert out["success"]
@@ -206,11 +204,15 @@ def test_invoke_on_a_native_device_goes_through_ucm_and_returns_the_devices_answ
 def test_invoke_on_a_device_that_is_not_connected_says_so_instead_of_success(env):
     _udm().register_device_from_dict("phone-1", {"device_type": "android_phone", "transport": "websocket"})
     out = _agent("devices__invoke", {"device_id": "phone-1", "action": "screenshot"})
-    assert out["success"] is False and "没有连接" in out["error"]
+    # 下发前的成员资格边界(core/device_boundaries.member)先查在不在线:不在线不发,也不先去问人
+    assert out["success"] is False and "不在线" in out["error"]
 
 
-def test_a_device_that_answers_failure_is_reported_as_failure(env):
+def test_a_device_that_answers_failure_is_reported_as_failure(env, monkeypatch):
     from core.unified.connection_manager import get_unified_connection_manager
+
+    # 测的是设备回了失败照实交回;要不要先问人那一道见 test_device_actions_pass_the_boundaries.py
+    monkeypatch.setenv("GALAXY_AUTONOMY", "autonomous")
 
     ucm = get_unified_connection_manager()
 
@@ -310,12 +312,20 @@ def test_remove_needs_the_users_ok(env):
     assert out["success"] and _udm().get_device("phone-1") is None
 
 
-def test_invite_a_phone_gives_a_real_pairing_code(env):
+def test_invite_a_device_running_the_app_gives_a_real_pairing_code(env):
     from core.agent_card import get_pairing_code_registry
 
-    out = _agent("devices__invite", {"kind": "phone"})
+    out = _agent("devices__invite", {"kind": "app"})
     assert out["success"] and out["code"] in out["tell_user"]
     assert get_pairing_code_registry().resolve(out["code"]) == out["link"]
+    assert "network" not in out, "进网的钥匙智能体要了才给,不白发一张凭证"
+    for kind_word in ("手机", "手表"):
+        assert kind_word not in out["tell_user"]
+
+
+def test_the_old_device_kind_names_still_work_as_aliases(env):
+    assert _agent("devices__invite", {"kind": "phone"})["human_step"] == "confirm_on_device"
+    assert _agent("devices__invite", {"kind": "laptop"})["human_step"] == "run_command"
 
 
 def test_invite_a_worker_without_headscale_says_how_to_fix(env):
@@ -326,7 +336,7 @@ def test_invite_a_worker_without_headscale_says_how_to_fix(env):
 def test_invite_a_laptop_gives_one_command_with_a_real_pairing_code(env):
     from core.agent_card import get_pairing_code_registry
 
-    out = _agent("devices__invite", {"kind": "laptop"})
+    out = _agent("devices__invite", {"kind": "client"})
     assert out["success"] and out["human_step"] == "run_command"
     short, full = out["commands"]
     assert short == f"python -m device_client --pair {out['code']} --install-autostart"

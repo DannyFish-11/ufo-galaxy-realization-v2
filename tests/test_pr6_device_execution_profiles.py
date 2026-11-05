@@ -168,8 +168,8 @@ class TestProfileFactories:
         assert p.preferred_mode == "command_only"
         assert "command_only" in p.supported_modes
 
-    def test_build_profile_from_device_info_android(self):
-        """Android device with screen/touch → rich profile."""
+    def test_build_profile_from_device_info_declared_agent(self):
+        """A device that declares it runs an agent → rich profile (whatever its type)."""
         from core.device_execution_profile import (
             DeviceProfileClass,
             build_profile_from_device_info,
@@ -178,15 +178,26 @@ class TestProfileFactories:
         info = {
             "device_id": "android_01",
             "device_type": "android",
-            "capabilities": ["screen", "touch", "camera"],
+            "capabilities": ["autonomous_goal_execution", "screen", "touch"],
         }
         p = build_profile_from_device_info(info)
         assert p.profile_class == DeviceProfileClass.rich
         assert p.supports_agent_runtime is True
         assert p.preferred_mode == "agent_runtime"
 
-    def test_build_profile_from_device_info_drone(self):
-        """Drone device → thin profile."""
+    def test_neither_the_type_nor_a_screen_makes_a_device_rich(self):
+        """类型和「有屏幕、有摄像头」都不决定它能不能跑 Agent:没声明就是 unknown。"""
+        from core.device_execution_profile import (
+            DeviceProfileClass,
+            build_profile_from_device_info,
+        )
+
+        for dtype in ("android", "tablet", "windows", "drone", "iot"):
+            info = {"device_type": dtype, "capabilities": ["screen", "touch", "camera", "keyboard"]}
+            assert build_profile_from_device_info(info).profile_class == DeviceProfileClass.unknown, dtype
+
+    def test_build_profile_from_device_info_declared_command_only(self):
+        """A device that declares it only takes commands → thin profile."""
         from core.device_execution_profile import (
             DeviceProfileClass,
             build_profile_from_device_info,
@@ -195,15 +206,15 @@ class TestProfileFactories:
         info = {
             "device_id": "drone_01",
             "device_type": "drone",
-            "capabilities": ["gps", "accelerometer"],
+            "capabilities": ["command_only", "gps", "accelerometer"],
         }
         p = build_profile_from_device_info(info)
         assert p.profile_class == DeviceProfileClass.thin
         assert p.supports_agent_runtime is False
         assert p.preferred_mode == "command_only"
 
-    def test_build_profile_from_device_info_iot(self):
-        """IoT sensor → thin profile."""
+    def test_build_profile_from_device_info_undeclared_sensor(self):
+        """A sensor that declares nothing → unknown (conservative command_only), not thin by its type."""
         from core.device_execution_profile import (
             DeviceProfileClass,
             build_profile_from_device_info,
@@ -211,7 +222,8 @@ class TestProfileFactories:
 
         info = {"device_type": "iot", "capabilities": ["temperature_sensor"]}
         p = build_profile_from_device_info(info)
-        assert p.profile_class == DeviceProfileClass.thin
+        assert p.profile_class == DeviceProfileClass.unknown
+        assert p.preferred_mode == "command_only"
 
     def test_build_profile_from_device_info_empty(self):
         """No capability info → unknown profile with conservative fallback."""
@@ -233,7 +245,7 @@ class TestProfileFactories:
 
         info = {
             "device_type": "android",
-            "capabilities": [{"name": "screen"}, {"name": "touch"}],
+            "capabilities": [{"name": "agent_runtime"}, {"name": "screen"}, {"name": "touch"}],
         }
         p = build_profile_from_device_info(info)
         assert p.profile_class == DeviceProfileClass.rich
@@ -434,52 +446,34 @@ class TestRemoteExecutionModeResolverFallback:
 class TestRepresentativeDeviceScenarios:
     """End-to-end profile + resolver scenarios for real device classes."""
 
-    def test_phone_resolves_to_agent_runtime(self):
-        """Phone/tablet → rich profile → agent_runtime."""
+    def test_a_device_declaring_an_agent_resolves_to_agent_runtime(self):
+        """Declared agent runtime → rich profile → agent_runtime, whatever the type."""
         from core.device_execution_profile import build_profile_from_device_info
         from core.remote_execution_mode_resolver import resolve_mode
 
-        info = {"device_type": "android", "capabilities": ["screen", "touch", "camera"]}
-        profile = build_profile_from_device_info(info, device_id="phone_01")
-        result = resolve_mode(profile=profile)
-        assert result.mode == "agent_runtime"
+        for dtype, cap in (
+            ("android", "autonomous_goal_execution"),
+            ("tablet", "agent_runtime"),
+            ("windows", "execute_agent"),
+        ):
+            info = {"device_type": dtype, "capabilities": [cap, "screen"]}
+            assert resolve_mode(profile=build_profile_from_device_info(info, device_id=dtype)).mode == "agent_runtime"
 
-    def test_tablet_resolves_to_agent_runtime(self):
+    def test_a_device_declaring_command_only_resolves_to_command_only(self):
         from core.device_execution_profile import build_profile_from_device_info
         from core.remote_execution_mode_resolver import resolve_mode
 
-        info = {"device_type": "tablet", "capabilities": ["screen", "touch"]}
-        profile = build_profile_from_device_info(info, device_id="tablet_01")
-        result = resolve_mode(profile=profile)
-        assert result.mode == "agent_runtime"
-
-    def test_drone_resolves_to_command_only(self):
-        """Drone → thin profile → command_only."""
-        from core.device_execution_profile import build_profile_from_device_info
-        from core.remote_execution_mode_resolver import resolve_mode
-
-        info = {"device_type": "drone", "capabilities": ["gps", "camera"]}
+        info = {"device_type": "drone", "capabilities": ["command_only", "gps", "camera"]}
         profile = build_profile_from_device_info(info, device_id="drone_01")
-        result = resolve_mode(profile=profile)
-        assert result.mode == "command_only"
+        assert resolve_mode(profile=profile).mode == "command_only"
 
-    def test_iot_sensor_resolves_to_command_only(self):
+    def test_a_device_declaring_nothing_falls_back_conservatively_whatever_its_type(self):
         from core.device_execution_profile import build_profile_from_device_info
         from core.remote_execution_mode_resolver import resolve_mode
 
-        info = {"device_type": "iot", "capabilities": ["temperature_sensor"]}
-        profile = build_profile_from_device_info(info, device_id="sensor_01")
-        result = resolve_mode(profile=profile)
-        assert result.mode == "command_only"
-
-    def test_windows_pc_resolves_to_agent_runtime(self):
-        from core.device_execution_profile import build_profile_from_device_info
-        from core.remote_execution_mode_resolver import resolve_mode
-
-        info = {"device_type": "windows", "capabilities": ["screen", "keyboard"]}
-        profile = build_profile_from_device_info(info, device_id="pc_01")
-        result = resolve_mode(profile=profile)
-        assert result.mode == "agent_runtime"
+        for dtype in ("android", "windows", "iot"):
+            info = {"device_type": dtype, "capabilities": ["screen", "keyboard", "temperature_sensor"]}
+            assert resolve_mode(profile=build_profile_from_device_info(info, device_id=dtype)).mode == "command_only"
 
     def test_device_supporting_both_modes_deterministic(self):
         """Device that supports both modes should deterministically resolve to agent_runtime

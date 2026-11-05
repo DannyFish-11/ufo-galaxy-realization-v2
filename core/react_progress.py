@@ -37,10 +37,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Deque, Dict, Tuple
 
+# 回喂给模型的工具结果文字:一处说了算(core/tool_result_text.py)。这里保留同名入口,旧的调用方照用。
+from core.tool_result_text import tool_result_text  # noqa: F401
+
 __all__ = [
     "ToolOutcome",
     "classify_tool_outcome",
     "outcome_hint",
+    "tool_result_text",
     "ProgressTracker",
     "ProgressVerdict",
 ]

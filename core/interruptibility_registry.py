@@ -1,4 +1,8 @@
-"""可打扰性登记处 —— 手表报上来的「现在能不能打扰他」。
+"""可打扰性登记处 —— 设备报上来的「现在能不能打扰他」。
+
+哪台设备报了就记哪台,不看它是什么设备。新版设备把 ``interruptible`` 放在心跳的状态里
+(``core/device_state.py`` 读入后交给 :meth:`InterruptibilityRegistry.observe`);旧版手表单独发
+``interruptibility`` 帧,照认一个版本(:meth:`InterruptibilityRegistry.record`)。
 
 ## 这块解决什么
 
@@ -40,7 +44,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 #: 手表侧 ``InterruptibilityBand`` 的线上字符串。跨仓协议,改动即漂移
-#: (手表侧由 ``InterruptibilityWireContractTest`` 钉死)。
+#: (手表侧由 ``WatchStateTest`` 钉死;新版设备在心跳状态里报其中四档,见 core/device_state.py)。
 KNOWN_BANDS = ("unknown", "blocked", "busy", "neutral", "free")
 
 #: 超过这么久没收到新报告,就当作没有数据(手表心跳周期 10 分钟)。
@@ -51,7 +55,10 @@ STALE_AFTER_S = 25 * 60.0
 _MAX_REASONS = 8
 _MAX_REASON_LEN = 32
 
-#: 粗粒度标签 → 中文说法。未登记的标签原样透传(前向兼容,不吞掉新标签)。
+#: 设备只报档位时给诊断面看的分数(旧帧自带分数)。
+_BAND_SCORE = {"blocked": 0.0, "busy": 0.25, "neutral": 0.5, "free": 1.0}
+
+#: 旧帧的粗粒度标签 → 中文说法。未登记的标签原样透传(前向兼容,不吞掉新标签)。新版设备自己写 note。
 _REASON_LABELS = {
     "dnd": "已开勿扰",
     "likely_asleep": "极可能在睡",
@@ -76,6 +83,10 @@ class InterruptibilitySnapshot:
     confidence: float = 0.0
     device_id: str = ""
     received_at: float = 0.0
+    #: 设备自己写的一句话(新版设备);旧帧由原因标签译成
+    note: str = ""
+    #: 人叫这台设备的名字,写进提示词:「某某:此刻明确不宜打扰」
+    source: str = ""
 
     @property
     def usable(self) -> bool:
@@ -97,6 +108,8 @@ class InterruptibilitySnapshot:
             "confidence": round(self.confidence, 2),
             "device_id": self.device_id,
             "received_at": self.received_at,
+            "note": self.note,
+            "source": self.source,
         }
 
 
@@ -132,8 +145,9 @@ class InterruptibilityRegistry:
         payload: Dict[str, Any],
         device_id: str = "",
         now: Optional[float] = None,
+        source: str = "",
     ) -> Optional[InterruptibilitySnapshot]:
-        """收下一条上行报告。band 不认识就整条拒收(协议漂移要看得见)。"""
+        """收下旧版手表单独发的一条 ``interruptibility`` 帧。band 不认识就整条拒收(协议漂移要看得见)。"""
         if not isinstance(payload, dict):
             return None
 
@@ -154,17 +168,44 @@ class InterruptibilityRegistry:
             confidence=_coerce_unit(payload.get("confidence"), 0.0),
             device_id=str(device_id or payload.get("device") or ""),
             received_at=now if now is not None else time.time(),
+            source=str(source or ""),
         )
         with self._lock:
             self._by_device[snapshot.device_id] = snapshot
         return snapshot
+
+    def observe(
+        self, device_id: str, band: str, *, note: str = "", source: str = "", now: Optional[float] = None
+    ) -> Optional[InterruptibilitySnapshot]:
+        """设备在心跳状态里报的 ``interruptible``。设备报了就是它判断得了,不再另带置信度;拿不准的话它自己写进 note。"""
+        band = str(band or "").strip().lower()
+        if band not in KNOWN_BANDS or band == "unknown":
+            logger.warning("设备 %s 报的 interruptible=%r 不认识,不记", device_id, band)
+            return None
+        snapshot = InterruptibilitySnapshot(
+            score=_BAND_SCORE[band],
+            band=band,
+            confidence=1.0,
+            device_id=str(device_id or ""),
+            received_at=now if now is not None else time.time(),
+            note=str(note or "")[:120],
+            source=str(source or ""),
+        )
+        with self._lock:
+            self._by_device[snapshot.device_id] = snapshot
+        return snapshot
+
+    def forget(self, device_id: str) -> None:
+        """这台设备最新一份状态没报 ``interruptible``:它现在说不出,撤掉它上一份的。"""
+        with self._lock:
+            self._by_device.pop(str(device_id or ""), None)
 
     # ── 读 ──────────────────────────────────────────────────────────────
 
     def current(self, now: Optional[float] = None) -> Optional[InterruptibilitySnapshot]:
         """最新且未过期的那条;一条都没有则 None。
 
-        多块手表时取**最新**那条 —— 人只有一个,后报的更接近现状。
+        几台设备都报了时取**最新**那条 —— 人只有一个,后报的更接近现状。
         """
         ts = now if now is not None else time.time()
         with self._lock:
@@ -176,7 +217,7 @@ class InterruptibilityRegistry:
     def is_blocked(self, now: Optional[float] = None) -> bool:
         """此刻是否明确不宜**主动**开口。
 
-        只有 BLOCKED 才返回 True。UNKNOWN/陈旧/没有手表一律 False ——
+        只有 BLOCKED 才返回 True。UNKNOWN/陈旧/没有设备报一律 False ——
         「不知道」不构成阻拦的理由,正如它不构成放行的理由。
         """
         snapshot = self.current(now)
@@ -192,17 +233,25 @@ class InterruptibilityRegistry:
         if snapshot is None or not snapshot.usable:
             return ""
 
-        labels = "、".join(_REASON_LABELS.get(r, r) for r in snapshot.reasons)
+        labels = snapshot.note or "、".join(_REASON_LABELS.get(r, r) for r in snapshot.reasons)
         detail = f"({labels})" if labels else ""
         hedge = "，但证据不足、仅供参考" if snapshot.confidence < 0.5 else ""
+        who = snapshot.source or snapshot.device_id or "设备"
 
         if snapshot.band == "blocked":
-            return f"（手表：此刻明确不宜打扰{detail}{hedge}。除非极其紧要，请选 SILENT。）"
+            return f"（{who}：此刻明确不宜打扰{detail}{hedge}。除非极其紧要，请选 SILENT。）"
         if snapshot.band == "busy":
-            return f"（手表：用户此刻偏忙{detail}{hedge}。除非要紧，倾向 SILENT。）"
+            return f"（{who}：用户此刻偏忙{detail}{hedge}。除非要紧，倾向 SILENT。）"
         if snapshot.band == "free":
-            return f"（手表：用户此刻大概率可被打扰{detail}{hedge}。）"
+            return f"（{who}：用户此刻大概率可被打扰{detail}{hedge}。）"
         return ""
+
+    def blocking_source(self, now: Optional[float] = None) -> str:
+        """此刻是谁说了「明确别打扰」(人叫它的名字);没有就是空串。"""
+        snapshot = self.current(now)
+        if not (snapshot and snapshot.band == "blocked"):
+            return ""
+        return snapshot.source or snapshot.device_id or "设备"
 
     # ── 运维 ────────────────────────────────────────────────────────────
 

@@ -9,7 +9,7 @@ def registration_name(message: Dict[str, Any], device_id: str, utype: Any) -> st
     """设备在名册里叫什么 —— 模型在设备整体卡里看到的就是它。
 
     依次:帧里的 ``name`` / ``device_name``(顶层或 payload;手表报 ``device_name``)→ 配对时起的名字
-    (``/api/v1/pair/claim`` 的 ``name``,手机的登记帧不带名字)→ 型号 → 兜底。此前只认 ``name``,
+    (``/api/v1/pair/claim`` 的 ``name``,手机的登记帧不带名字)→ 型号 → 设备 id(不按平台起一个泛称)。此前只认 ``name``,
     报了 ``device_name="OPPO Watch 3"`` 的手表在名册里叫「Android Device」(真机实测)。
     """
     payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
@@ -26,6 +26,4 @@ def registration_name(message: Dict[str, Any], device_id: str, utype: Any) -> st
         pass
     if str(message.get("model") or "").strip():
         return str(message["model"]).strip()
-    from core.unified.models import UnifiedDeviceType
-
-    return "Android Device" if utype == UnifiedDeviceType.ANDROID else device_id
+    return device_id

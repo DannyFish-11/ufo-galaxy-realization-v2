@@ -156,15 +156,25 @@ def _load_all() -> Dict[str, Any]:
         return {}
 
 
+def _without_results(plan: Dict[str, Any]) -> Dict[str, Any]:
+    """做完的计划写盘时去掉每一步的结果:结果已经交给发起计划的智能体,中心不留设备数据的副本
+    (边界 7,``core/device_boundaries.kept``)。成没成、没成的原因照留,供诊断。"""
+    out = dict(plan)
+    out["steps"] = [{k: v for k, v in s.items() if k != "result"} for s in plan.get("steps") or []]
+    return out
+
+
 def _save(plan: Dict[str, Any]) -> None:
-    """把这份计划的此刻写盘(原子替换);做完的只留最近几份供诊断。"""
+    """把这份计划的此刻写盘(原子替换);做完的只留最近几份供诊断,不带每一步的结果。
+
+    进行中的照带结果:依赖它的步骤要用,崩溃后接着做也要用。"""
     with _lock:
         data = _load_all()
         active = data.setdefault("active", {})
         finished = data.setdefault("finished", [])
         if plan.get("finished_at"):
             active.pop(plan["plan_id"], None)
-            finished = [p for p in finished if p.get("plan_id") != plan["plan_id"]] + [plan]
+            finished = [p for p in finished if p.get("plan_id") != plan["plan_id"]] + [_without_results(plan)]
             data["finished"] = finished[-_KEEP_FINISHED:]
         else:
             active[plan["plan_id"]] = plan
@@ -228,7 +238,7 @@ class _StepRunner:
         排着队的那一步还没动过设备,崩溃后要接着做;只有真开始做了的那一步才算结果不明。名额在轮到之后才占:
         排在一台忙设备后面的几步不占名额,不挡别的设备上能做的步骤。
         """
-        from core.device_queue import run_on_device
+        from core.device_boundaries import one_at_a_time
 
         async def job() -> Dict[str, Any]:
             async with self._limit:
@@ -236,7 +246,7 @@ class _StepRunner:
                 _save(self.plan)
                 return await self._dispatch(step)
 
-        return await run_on_device(step["device_id"], job, timeout=step["timeout_s"] + 10)
+        return await one_at_a_time(step["device_id"], job, timeout=step["timeout_s"] + 10)
 
     async def _dispatch(self, step: Dict[str, Any]) -> Dict[str, Any]:
         # 直接调设备工具的内层(队列已经在上面排过了;再走 dispatch_devices_tool 会在同一个队列里等自己)
@@ -311,11 +321,17 @@ def _report(plan: Dict[str, Any]) -> Dict[str, Any]:
                 "id": s["id"],
                 "device_id": s["device_id"],
                 "status": s["status"],
-                **({"result": s["result"]} if s["status"] == SUCCESS else {"error": s["error"]}),
+                **(
+                    ({"result": s["result"]} if "result" in s else {})
+                    if s["status"] == SUCCESS
+                    else {"error": s["error"]}
+                ),
             }
             for s in steps
         ],
     }
+    if plan.get("finished_at") and done and not any("result" in s for s in steps):
+        out["results"] = "每一步的结果当时已经交给发起计划的智能体;做完之后中心不留设备数据的副本"
     if done < len(steps):
         out["next"] = "看每一步的 error 再决定:只把没成功的步骤(和依赖它们的)重新交一份计划、换一台设备,或者问人"
     return out

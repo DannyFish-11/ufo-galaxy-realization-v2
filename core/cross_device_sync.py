@@ -185,7 +185,7 @@ def tell_origin_device(
     """Fire-and-forget:智能体处理一台设备发起的请求时,把这件事的进度(在想 / 在做 / 做完)只回给那台设备。
 
     电脑的三态是电脑这具身体的表达,**不推给任何设备** —— 设备直接对智能体:登记、报能力、说话、
-    拿回答。这里推的不是电脑的三态,而是发起设备自己那件请求的进度;手表不收(手表只响应,不显示进度)。
+    拿回答。这里推的不是电脑的三态,而是发起设备自己那件请求的进度;只推给自己声明会显示进度的设备。
     调用方见 :func:`core.presence_line.tell_origin`。
     """
     if not device_id:
@@ -209,21 +209,12 @@ def tell_origin_device(
     task.add_done_callback(_BACKGROUND_PHASE_SYNC_TASKS.discard)
 
 
-def _is_watch(device_id: str, device: Any) -> bool:
-    """是不是手表。bridge 的缓存条目认不出手表报的 ``wearos``(落成 UNKNOWN),所以也看 UDM 归一后的类型。"""
-    raw: List[Any] = [
-        getattr(getattr(device, "device_type", None), "value", ""),
-        getattr(getattr(device, "platform", None), "value", ""),
-    ]
-    try:
-        from core.unified.device_manager import get_unified_device_manager  # noqa: PLC0415
+def _shows_request_progress(device_id: str) -> bool:
+    """这台设备自己声明过会显示请求进度(``shows_request_progress``,见 ``core.device_declarations``)。
+    不看它是什么设备:没声明的不推 —— 推了它也不认,或者会被当成别的帧。"""
+    from core.device_declarations import declares
 
-        record = get_unified_device_manager().get_device(device_id)
-        if record is not None:
-            raw += [getattr(record, "form_factor", ""), getattr(record, "aip_device_type", "")]
-    except Exception as exc:  # noqa: BLE001 — 查不到就按 bridge 条目判
-        logger.debug("CrossDeviceSync: UDM lookup for %s failed: %s", device_id, exc)
-    return any("wear" in str(v).lower() or "watch" in str(v).lower() for v in raw)
+    return declares(device_id, "shows_request_progress")
 
 
 async def _push_request_progress(device_id: str, msg: Dict[str, Any]) -> bool:
@@ -235,7 +226,7 @@ async def _push_request_progress(device_id: str, msg: Dict[str, Any]) -> bool:
     device = bridge.get_device(device_id)
     if device is None or device.websocket is None or not getattr(device, "connected", False):
         return False
-    if _is_watch(device_id, device):
+    if not _shows_request_progress(device_id):
         return False
     try:
         return await _push_to_one_device(device_id, device, msg)

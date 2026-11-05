@@ -7,10 +7,11 @@
 
 一张卡回答五件事,都取自已有的权威,不另存一份:
 
-    是什么        名称、类型、形态                      UDM
-    能做什么      设备自己报的每个动作,附一句说明        能力权威面(capability_report 的 description)
+    是什么        名称、自报类型、一句形态描述            设备自述(core/device_self.py)/ UDM
+    能做什么      设备自己报的每个动作,附一句说明和做了    能力权威面 + 设备自述(effect、needs_human);
+                  会怎样;此刻做不了的附原因                此刻做不了的在自述的 unavailable
     现在怎么样    在线、电量、网络路径、忙不忙、能否打扰  UCM / UDM 状态上报 / 可打扰性登记
-    能否接 Agent  手机、Agent 载体能;手表、「手和眼」不能  UDM 的执行模型 + 设备自己的声明;装上了没有看桥接 Agent
+    能否接 Agent  设备自己声明能装(hosts_agent)          设备自己的声明 / 自报的运行时姿态;装上了没有看桥接 Agent
     最近做过什么  最近几次下发与结果                    任务流程图(task_graph_runtime)
 
 卡要短:它进模型上下文,动作最多列 ``MAX_ACTIONS`` 个、最近做过的最多 ``MAX_RECENT`` 条。
@@ -63,7 +64,11 @@ _GENERIC_DESCRIPTION_PREFIX = "[Gateway:"
 
 
 def _form(view: Dict[str, Any]) -> str:
-    """一个词说清它是什么形态:手表 / 手机 / 电脑 / 载体 / 家居 / 设备。"""
+    """一个词说清它是什么形态:手表 / 手机 / 电脑 / 载体 / 家居 / 设备。
+
+    只是给模型看的描述(取自设备自报的类型与形态),**不拿来决定任何行为** —— 能做什么、能不能接 Agent、
+    能不能问人,都看设备自己报的动作和声明。
+    """
     ff = str(view.get("form_factor") or "").lower()
     t = str(view.get("type") or "").lower()
     if view.get("bridge_id") or str(view.get("attached_via") or "").startswith(("ha:", "mcp:")):
@@ -80,21 +85,23 @@ def _form(view: Dict[str, Any]) -> str:
 
 
 def can_take_agent(view: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> bool:
-    """能不能接中心派来的 Agent:有完整运行时的设备(手机),或自己声明能跑 Agent 的载体。
-
-    手表只是人和智能体之间的入口和出口;「手和眼」式的电脑(``device_client``)只接单个动作。
-    """
+    """能不能接中心派来的 Agent:设备自己声明能跑 Agent(报能力时声明 ``bridge_agent``),或登记时自报是
+    完整运行时(``join_runtime``)。不看设备是什么。"""
     meta = metadata or {}
     if meta.get("can_host_agent") is True or meta.get("agent_runtime") is True:
         return True
     if meta.get("can_host_agent") is False:
         return False
-    return str(view.get("role") or "") == FULL_RUNTIME_HOST and _form(view) != "watch"
+    return str(view.get("role") or "") == FULL_RUNTIME_HOST
 
 
-def _actions(device_id: str, raw_capabilities: List[str]) -> List[Dict[str, str]]:
-    """设备自己报的动作(能力权威面里 ``gateway__<id>__<action>``),附一句说明。"""
-    out: List[Dict[str, str]] = []
+def _actions(
+    device_id: str, raw_capabilities: List[str], described: Optional[Dict[str, Dict[str, Any]]] = None
+) -> List[Dict[str, Any]]:
+    """设备自己报的动作(能力权威面里 ``gateway__<id>__<action>``),附一句说明;
+    设备在自述里说了做了会怎样(``effect``)、要不要人在设备上点(``needs_human``)的,一并带上。"""
+    described = described or {}
+    out: List[Dict[str, Any]] = []
     try:
         from core.unified.capability_authority import CapabilityAuthority
 
@@ -108,7 +115,13 @@ def _actions(device_id: str, raw_capabilities: List[str]) -> List[Dict[str, str]
             desc = str(getattr(rec, "description", "") or "")
             if desc.startswith(_GENERIC_DESCRIPTION_PREFIX):
                 desc = ""
-            out.append({"name": action, "does": desc or ACTION_GLOSSARY.get(action, "")})
+            item: Dict[str, Any] = {"name": action, "does": desc or ACTION_GLOSSARY.get(action, "")}
+            said = described.get(action) or {}
+            if said.get("effect"):
+                item["effect"] = said["effect"]
+            if said.get("needs_human"):
+                item["needs_human"] = True
+            out.append(item)
     except Exception as exc:  # noqa: BLE001 — 卡片是只读视图,拿不到动作不该让整张表失败
         logger.debug("device card: actions unavailable for %s: %s", device_id, exc)
     if not out:
@@ -142,15 +155,16 @@ def _network(device_id: str) -> str:
 
 
 def _status(view: Dict[str, Any], metadata: Dict[str, Any], now: float) -> Dict[str, Any]:
+    """此刻的状态只有两种来源:中心看到的(在线、最后见到、网络路径、有没有命令在跑)和设备自己报的
+    (``core/device_state.py``:电量、屏幕、戴没戴着、能不能打扰……)。设备没报的不写,不替它推断。"""
+    from core.device_state import current  # noqa: PLC0415
+
     device_id = view["device_id"]
     status: Dict[str, Any] = {"online": bool(view.get("online"))}
     last_seen = float(view.get("last_seen") or 0.0)
     if last_seen:
         status["seen_s_ago"] = int(max(0.0, now - last_seen))
-    report = metadata.get("device_status_report") if isinstance(metadata.get("device_status_report"), dict) else {}
-    battery = report.get("battery") if "battery" in report else report.get("battery_level")
-    if battery is not None:
-        status["battery"] = battery
+    status.update(current(metadata, online=status["online"], now=now))
     net = _network(device_id) if status["online"] else ""
     if net:
         status["network"] = net
@@ -160,15 +174,6 @@ def _status(view: Dict[str, Any], metadata: Dict[str, Any], now: float) -> Dict[
         status["busy"] = get_unified_connection_manager().inflight(device_id) > 0
     except Exception:  # noqa: BLE001
         pass
-    if _form(view) == "watch":
-        try:
-            from core.interruptibility_registry import get_interruptibility_registry
-
-            snap = get_interruptibility_registry()._by_device.get(device_id)
-            if snap is not None and not snap.is_stale(now):
-                status["interruptible"] = snap.band
-        except Exception:  # noqa: BLE001
-            pass
     return status
 
 
@@ -213,19 +218,38 @@ def build_device_card(view: Dict[str, Any], metadata: Optional[Dict[str, Any]] =
     meta = dict(metadata or {})
     bridge = _bridge(view["device_id"])
     raw_caps = [str(c) for c in (view.get("capabilities") or [])]
+    from core.device_self import described  # noqa: PLC0415
+
+    said = described(meta)
+    name = view.get("name") or ""
+    if not name or name == view["device_id"]:
+        name = said.get("name") or view["device_id"]
     card: Dict[str, Any] = {
         "device_id": view["device_id"],
-        "name": view.get("name") or view["device_id"],
+        "name": name,
         "type": view.get("type") or "",
-        "form": _form(view),
         "can_initiate": bool(view.get("can_initiate")),
         "status": _status(view, meta, now),
-        "actions": _actions(view["device_id"], raw_caps),
+        "actions": _actions(
+            view["device_id"], raw_caps, {a["name"]: a for a in said.get("actions") or [] if a.get("name")}
+        ),
         "can_take_agent": can_take_agent(view, meta) or bool(bridge.get("hosted")),
+        # 设备自己声明的:能把问题摆到人面前、把回答交回来(core.device_declarations)
+        "answers_decisions": meta.get("answers_decisions") is True,
         "agent_installed": bool(bridge.get("installed")),
         "recent": _recent(view["device_id"], now),
         "attached_via": view.get("bridge_id") or view.get("transport") or "",
     }
+    if said.get("source") == "self_description":
+        # 设备自己说的是什么(自报类型名只是描述)、此刻做不了的动作和原因 —— 模型照实转告人、告诉人怎么打开
+        card["kind"] = said.get("kind") or card["type"]
+        if said.get("about"):
+            card["about"] = said["about"]
+        if said.get("unavailable"):
+            card["unavailable"] = said["unavailable"][:MAX_ACTIONS]
+    else:
+        # 没有自述的旧版设备:按它登记的类型 / 形态给一个词,只是描述
+        card["form"] = _form(view)
     if raw_caps:
         card["raw_capabilities"] = raw_caps[:MAX_ACTIONS]
     classes = [str(c) for c in (view.get("capability_classes") or [])]

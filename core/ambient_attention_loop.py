@@ -114,10 +114,10 @@ def _ai_is_speaking() -> bool:
 
 
 def _interruptibility_note() -> str:
-    """手表报的「现在能不能打扰他」,取一行提示词;拿不到就空串。
+    """设备报的「现在能不能打扰他」,取一行提示词(写明是哪台设备说的);拿不到就空串。
 
-    登记处不可用(没装手表、模块导入失败)时返回空串,循环行为与接手表
-    之前完全一致 —— **没有证据既不放行也不阻拦**。
+    没有设备报、登记处不可用时返回空串,循环行为与没人报之前完全一致 ——
+    **没有证据既不放行也不阻拦**。
     """
     try:
         from core.interruptibility_registry import get_interruptibility_registry
@@ -128,9 +128,9 @@ def _interruptibility_note() -> str:
 
 
 def _interruptibility_blocked() -> bool:
-    """此刻是否**明确**不宜主动开口(手表 band=blocked)。
+    """此刻是否**明确**不宜主动开口(有设备报 blocked)。
 
-    只有明确的 BLOCKED 才是 True。UNKNOWN / 陈旧 / 没有手表一律 False。
+    只有明确的 BLOCKED 才是 True。UNKNOWN / 陈旧 / 没有设备报一律 False。
     """
     try:
         from core.interruptibility_registry import get_interruptibility_registry
@@ -140,8 +140,18 @@ def _interruptibility_blocked() -> bool:
         return False
 
 
+def _blocking_source() -> str:
+    """是哪台设备说了「明确别打扰」;说不上来就空串。"""
+    try:
+        from core.interruptibility_registry import get_interruptibility_registry
+
+        return get_interruptibility_registry().blocking_source()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _apply_interruptibility_gate(decision: AmbientDecision) -> AmbientDecision:
-    """手表说「明确别打扰」时,把 SPEAK 降级为 SILENT。
+    """有设备说「明确别打扰」时,把 SPEAK 降级为 SILENT。
 
     这是提示词之外的**硬闸**:提示词只是建议,模型可能无视它;
     用户开着勿扰或正在睡觉时,主动开口是不可接受的失败模式。
@@ -159,12 +169,13 @@ def _apply_interruptibility_gate(decision: AmbientDecision) -> AmbientDecision:
         return decision
     if not _interruptibility_blocked():
         return decision
-    logger.info("Ambient SPEAK 被可打扰性硬闸降级为 SILENT(手表报告 blocked)")
+    who = _blocking_source() or "设备"
+    logger.info("Ambient SPEAK 被可打扰性硬闸降级为 SILENT(%s 报告 blocked)", who)
     return AmbientDecision(
         action=AmbientAction.SILENT,
         # 保留原本要说的话在理由里:事后查日志能看出"它本来想说什么、
         # 为什么没说",而不是凭空少了一拍。
-        rationale=f"手表报告此刻不宜打扰,原判 SPEAK 已降级(原拟发言:{decision.utterance[:60]})",
+        rationale=f"{who}报告此刻不宜打扰,原判 SPEAK 已降级(原拟发言:{decision.utterance[:60]})",
         salient=False,
     )
 
