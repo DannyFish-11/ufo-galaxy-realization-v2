@@ -1169,6 +1169,17 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
 
 **同一个 PR 的 CI 抓到的：会话管理器的锁绑在别的事件循环上。** 分片 4 里 `test_session_unification` 写会话时抛 `<asyncio.locks.Lock [locked, waiters:1]> is bound to a different event loop`（本机同一分片跑不出来，时序相关）。根因：`SessionManager` 整个进程一把 `asyncio.Lock`，它在第一次有人排队时绑定到那个循环；一个循环停了而持锁的任务没收尾（`ensure_session` 持锁时还在等工作线程落盘），这把锁就永远「锁着」且绑在已经没了的循环上，之后别的循环（节点宿主线程、设备那一轮的后台循环、测试各自的循环）一来要锁就抛错、会话写不进去。改成每个事件循环一把（`core/loop_local_lock.py`）：同一个循环照旧互斥，跨循环本来就互斥不了。`tests/test_session_manager_lock_is_per_loop.py` 在旧代码上逐字复现那句报错。
 
+**核对另外两个仓库做完的（2026-11-04）：** 安卓 `claude/v2-repo-design-review-qzam45` @ `80d8be1d`、手表同名分支 @ `04adccb`（都还没合进各自的 main），中心对应的是 #1671（同名分支，CI 全绿）。A1 / A2 / A3 / W1 照 `DEVICE_CLIENT_REQUIREMENTS.md` 做了，W2 核对无误：
+
+- **他们的 Kotlin 测试在这里编出来跑**（没有安卓 SDK：把纯 Kotlin 的 `DecisionFrames` / `DecisionBook` / `PhoneSelfDescription` / `DeviceSelfDescription` / `DeviceState` / `WatchMember` 连同各自的测试抽进一个 JVM 工程）：53 项全过。
+- **真跑用两个 App 的 Kotlin 代码真正产出的帧**（`humanInputFrame`、`WatchMember` 的登记 / 能力 / 心跳状态帧、`PhoneSelfDescription`，只替换运行时的 id），中心分别是 #1671 与 main：
+  手机上说「删文件」→ 只在手机上问（「不要」在前）、点「批准」删好、点「不要」还在、面板不出卡、手机上没有「去电脑面板批」的进度句；一台答不了批准的设备发起、面板关着 → 手机与手表同一条决定都被问，一台答了另一台收到 `decision_withdraw`（`answered_elsewhere`），两个方向都对；中心真发出来的 14 条 `decision_request`、6 条 `decision_withdraw` 交给手机的 `DecisionFrames` / `DecisionBook` 全部解析正确。新 App 连现在的 main 也一样能用（只是 main 不读心跳里的状态）。
+- **核对时查出中心的一个老问题，已修**：启动器拉起的节点只在起来那一刻报过一次心跳，治理门的期限是 60 秒 —— 开机一分钟后，启动器拉起的节点（核心组的文件系统节点等）的规范调用全被治理门以 `unhealthy` 拒掉（`GET /api/v1/nodes/Node_06_Filesystem` 同时却说 healthy；在本进程里起的节点不登记，反倒照常放行）。真跑里就是：批准了，删的那一步被拒。main 上同样复现（`POST /api/v1/nodes/call` 一个只读动作回 403）。现在 `launcher/node_heartbeat.py` 每 20 秒看一遍：进程在、`/health` 应答了就报活，进程退了记 offline，不应答的不报（到期如实 unhealthy）；一轮只落盘一次、在工作线程里做。修后在节点起来 11 分钟后再跑那两轮：都删好了，治理门一次也没拒（`tests/test_launched_nodes_keep_reporting_alive.py`）。
+- **我自己写错的一处已更正**：`DEVICE_CLIENT_REQUIREMENTS.md` 第五节第 3 步原先写「手机发起、面板关掉时手机和手表都弹」——手机声明能批之后，手机发起的只在手机上问（从哪发起就在哪批）；同一个问题发给几台，是在发起的那台答不了、面板又关着的时候。
+- **合并顺序**：手表分支编译要用安卓 `shared-protocol` 里新加的 `DeviceSelfDescription` / `DeviceState`（手表 CI 按同名分支取安卓仓），所以安卓先合（或同时）、手表后合；#1671 与两个 App 谁先谁后都能用（App 的新字段旧中心不读、照常工作）。
+- **留给安卓仓的一处小建议**（不挡合并）：`DeviceCommandFrames.params` 只读顶层 `params`；中心有两条最后兜底的下发路径把参数放在 `payload`（`core/command_router.py`、`core/openclawd.py` 的 WebSocket 兜底），走到那两条时手机会拿到空参数。主路径（`devices__invoke` → `send_command_and_wait`）用的是 `params`，不受影响。
+- 顺带记下：停后端时，后端自己拉起的 `dockerd` 不随之停（父进程退了它还在）——与这次的改动无关，先记下没改。
+
 ### 6.21 2026-10-19：跨设备拆闸与正名（整体方案阶段 0）
 
 所有者的定义：中心智能体协调一切；「主脑」是一个角色——智能体跑在哪台设备上，哪台就是主脑；每台有跨设备能力的设备打开**自己的**跨设备、登录加入，

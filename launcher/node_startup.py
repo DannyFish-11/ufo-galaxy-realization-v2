@@ -42,7 +42,6 @@ import json
 import logging
 import os
 import sys
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # PR-FIX: relative imports changed to absolute imports so this module
@@ -1013,11 +1012,12 @@ class NodeSystemLauncher:
         slow = report_node_failures(results, self._node_failure_reasons, self._node_failure_details, print_status)
         if slow:  # 进程还活着、只是慢:后台继续等,起来了自动登记
             self._slow_watchers.append(asyncio.create_task(adopt_slow_nodes(self, slow)))
+        from launcher.node_heartbeat import start as keep_alive  # 拉起的节点一直报活,否则一分钟后治理门判它 unhealthy
 
-        # PR-12: Bulk-seed all healthy fabric-registry nodes into
-        # NodeDiscoveryService now that the startup batch has completed.
-        # This closes the gap where initialize_discovery_after_startup() was
-        # defined but never invoked by the real startup orchestration.
+        keep_alive(self)
+
+        # PR-12: Bulk-seed all healthy fabric-registry nodes into NodeDiscoveryService now that the startup
+        # batch has completed (initialize_discovery_after_startup() used to be defined but never invoked).
         await self.initialize_discovery_after_startup()
 
         return results
