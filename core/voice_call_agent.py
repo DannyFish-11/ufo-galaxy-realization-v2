@@ -440,7 +440,7 @@ class CallAgent:
             note += " 这件事要他在弹出的确认上点「批准」才算;他说不要就算拒绝。"
         self._notes.append((note, decision_id))
         try:
-            asyncio.get_running_loop().create_task(self._flush_notes())
+            self._track(self._flush_notes())  # 留着引用:没人拿着的任务可能做到一半被回收
         except RuntimeError:
             pass  # 没有事件循环:下一条下行事件时再插
 
@@ -482,7 +482,7 @@ class CallAgent:
         try:
             result = self._send_event("agent_task", text[:120], "")
             if asyncio.iscoroutine(result):
-                asyncio.ensure_future(result)
+                self._track(result)
         except Exception as exc:  # noqa: BLE001
             logger.debug("call=%s 显示进度失败: %s", self.call_id, exc)
 

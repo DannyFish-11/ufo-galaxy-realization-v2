@@ -46,6 +46,7 @@ from core.mcp_protocol import (
     is_method_not_found,
     negotiated_version,
 )
+from core.own_process import OWN_GROUP_KW, stop_and_close
 
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
@@ -474,39 +475,40 @@ class MCPLoader:
             env = os.environ.copy()
             env.update(server.env)
 
-            # 完整命令
-            full_command = server.command + server.args
-
-            # 启动进程
-            server.process = subprocess.Popen(
-                full_command,
+            if server.process is not None:  # 重启 / 重载:先停掉、收掉上一个,不留孤儿与僵尸
+                await asyncio.to_thread(stop_and_close, server.process)
+            # 起进程不在事件循环上;自成一组,停的时候连它拉起的子进程(npm exec 拉起的 node)一起停
+            server.process = await asyncio.to_thread(
+                subprocess.Popen,
+                server.command + server.args,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
                 cwd=server.cwd or None,
+                **OWN_GROUP_KW,
             )
-
-            # 等待启动
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.5)  # 等待启动
 
             if server.process.poll() is not None:
                 server.status = MCPServerStatus.ERROR
-                server.error = server.process.stderr.read().decode()
+                server.error = await asyncio.to_thread(stop_and_close, server.process) or "进程一起来就退了"
+                server.process = None
                 return False
-
-            # 初始化连接
-            await self._initialize(server_id)
-
+            # 握手没回结果就不是「在跑」:此前不看返回值,一律记成 RUNNING
+            if not await self._initialize(server_id):
+                raise RuntimeError("服务端没有应答 MCP 握手(initialize 没回结果)")
             server.status = MCPServerStatus.RUNNING
             logger.info(f"MCP 服务器已启动: {server.name} ({server_id})")
             return True
 
         except Exception as e:
-            logger.debug("Fallback triggered: %s", e)
             server.status = MCPServerStatus.ERROR
             server.error = str(e)
             logger.error(f"启动 MCP 服务器失败: {e}")
+            if server.process is not None:  # 起来了却没接上:停掉、收掉(撒手不管的进程退了没人 wait,就是僵尸)
+                await asyncio.to_thread(stop_and_close, server.process)
+                server.process = None
             return False
 
     async def stop(self, server_id: str) -> bool:
@@ -515,16 +517,8 @@ class MCPLoader:
         if not server:
             return False
 
-        if server.process:
-            try:
-                server.process.terminate()
-                server.process.wait(timeout=5)
-            except (OSError, subprocess.TimeoutExpired) as e:
-                logger.warning(f"MCP 进程 terminate 失败，强制 kill: {e}")
-                try:
-                    server.process.kill()
-                except OSError:
-                    pass
+        if server.process:  # 连它拉起的子进程一起停、收掉、关管道;在工作线程里等,不占事件循环
+            await asyncio.to_thread(stop_and_close, server.process)
             server.process = None
 
         server.status = MCPServerStatus.STOPPED

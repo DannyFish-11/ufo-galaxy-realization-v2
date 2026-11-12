@@ -382,6 +382,22 @@ def _reset_session_registry():
     yield
 
 
+# 请求准入的全局仲裁器(``core.orchestration.global_arbiter``)也是进程级单例:一个测试的事件循环在请求
+# 还没收尾时就关了(「Task was destroyed but it is pending!」),那个请求占的名额就永远不还 —— 同一来源
+# 漏满 4 个以后,之后测试里这个来源的请求一进来就被以 AR_002 拒掉、根本走不到派发。分片里抓到过:
+# tests/test_stop_while_it_acts.py 等 ambient 请求走到派发,5 秒没等到。每个测试从空名额开始。
+@pytest.fixture(autouse=True)
+def _fresh_admission_slots():
+    try:
+        from core.orchestration.global_arbiter import reset_global_arbiter
+    except ImportError:
+        yield
+        return
+    reset_global_arbiter()
+    yield
+    reset_global_arbiter()
+
+
 # 节点激活执行器:``GalaxyUnified.__init__`` 会往 ``core.node_activation_policy`` 登记一个
 # **真的会起子进程**的执行器(launcher_adapter.activate —— 生产里这正是它该做的)。
 # 可它是进程级全局,登记了就不撤:任何一个测试只要构造过一次 GalaxyUnified,此后整个

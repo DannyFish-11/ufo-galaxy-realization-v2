@@ -30,6 +30,7 @@ from core import upper_ports
 from core.agent.agent_receipt import read_agent_receipt
 from core.agent.intent_router import IntentResult
 from core.agent.multimodal_messages import MULTIMODAL_TASK_KEY
+from core.human_wait import run_within
 
 # C阶段 4B: 任务记忆（可选依赖）
 try:
@@ -752,10 +753,8 @@ class ExecutionPlanner:
                 _max_replans = 1
             _replans = 0
             while True:
-                result = await asyncio.wait_for(
-                    self._dispatch(plan, strategy, steps, tool_calls),
-                    timeout=plan.timeout,
-                )
+                # 等人点头、等设备做完的那一段不算进执行时限(core/human_wait.py):它们各有自己的期限
+                result = await run_within(self._dispatch(plan, strategy, steps, tool_calls), plan.timeout)
                 if result.success or _replans >= _max_replans:
                     break
                 _replans += 1

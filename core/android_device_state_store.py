@@ -55,6 +55,9 @@ import time
 from dataclasses import dataclass, field, fields
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
+from core.atomic_json import atomic_write_text
+from core.persist_off_loop import OffLoopWriter
+
 logger = logging.getLogger("Galaxy.AndroidDeviceStateStore")
 T = TypeVar("T")
 
@@ -449,6 +452,8 @@ class _AndroidDeviceStateStore:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._state_path: Optional[str] = _resolve_store_state_path()
+        path = self._state_path
+        self._writer = OffLoopWriter(lambda text: atomic_write_text(path, text), "android_device_state_store")
         self._last_persisted_at: Optional[float] = None
         self._last_restored_at: Optional[float] = None
         self._restored_counts: Dict[str, int] = {"snapshots": 0, "execution_events": 0}
@@ -801,41 +806,21 @@ class _AndroidDeviceStateStore:
             "snapshot_reconciliation": dict(self._snapshot_reconciliation),
             "execution_events": [e.to_dict() for e in self._execution_events[-self._MAX_EVENTS :]],
         }
-        # 修复:tmp_path 必须在 try 外先置 None——若 os.makedirs 先抛异常,
-        # except 分支引用 tmp_path 会 NameError,把真实的持久化错误吞成新崩溃。
-        tmp_path: Optional[str] = None
+        # 快照在锁里用 C 编码器一口气编好(``json.dump`` 流式写走的是纯 Python 编码器,整份 0.6 秒卡在事件循环里);
+        # 写盘在事件循环里就交给工作线程,按先后,新的不会被旧的盖掉(core/persist_off_loop.py)
         try:
-            directory = os.path.dirname(path)
-            if directory:
-                os.makedirs(directory, exist_ok=True)
-            with tempfile.NamedTemporaryFile(
-                "w",
-                encoding="utf-8",
-                dir=(directory or None),
-                prefix="android-device-state-",
-                suffix=".tmp",
-                delete=False,
-            ) as fp:
-                tmp_path = fp.name
-                json.dump(state, fp, ensure_ascii=False, sort_keys=True)
-            os.replace(tmp_path, path)
-            self._last_persisted_at = state["persisted_at"]
+            text = json.dumps(state, ensure_ascii=False, sort_keys=True)
         except Exception as exc:
-            if tmp_path is not None:
-                try:
-                    os.remove(tmp_path)
-                except Exception as cleanup_exc:
-                    logger.debug(
-                        "android_device_state_store temp cleanup skipped (%s): %s",
-                        tmp_path,
-                        cleanup_exc,
-                    )
             logger.warning("android_device_state_store persist skipped (%s): %s", path, exc)
+            return
+        self._writer.submit(text)
+        self._last_persisted_at = state["persisted_at"]
 
     def clear_durable_state(self) -> None:
         path = self._state_path
         if not path:
             return
+        self._writer.drop_pending()  # 还没写下去的不再写,免得清完又被写回来
         try:
             os.remove(path)
         except FileNotFoundError:

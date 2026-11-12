@@ -2420,6 +2420,12 @@ class GalaxyUnified:
         # Write entrypoint.json(线程里写:见上面绑定成功那一次的说明)
         await asyncio.to_thread(self._write_entrypoint_json)
 
+        # 起好的这一大片(几千个模块、几十万个对象)不会再被回收:挪出 GC 的视野,以后的全量回收不再每次把它们扫一遍
+        # (第 18 轮真跑:一次全量回收在事件循环里停了 0.4 秒,最里面是 _weakrefset._remove)
+        import gc
+
+        gc.freeze()
+
         # Start process watchdog
         await self.watch_processes()
 

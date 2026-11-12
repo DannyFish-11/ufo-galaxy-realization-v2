@@ -460,7 +460,10 @@ async def _ask_desktop(
     post_approval_card(req.request_id, what)
     publish_pending()
     try:
-        await asyncio.wait_for(event.wait(), timeout=wait_s)
+        from core.human_wait import waiting_for_human  # 等人的时间不算进这一轮的执行时限
+
+        async with waiting_for_human():
+            await asyncio.wait_for(event.wait(), timeout=wait_s)
     except asyncio.TimeoutError:
         registry._resolve(  # noqa: SLF001
             req.request_id, ApprovalStatus.TIMED_OUT, resolved_by="approval_gate", deny_reason="没有人点"

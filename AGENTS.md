@@ -140,6 +140,9 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   一次调用只问一次（工具门批过的，节点门认）；门禁自己出错一律不执行（节点门：读照放、写不执行）。设计与进度：`docs/GROUNDED_AGENT_DESIGN.md`
 - 工具的单次时间预算（`core/tool_permissions.py::tool_call_timeout_s`）给等人、给长任务留够：会停下来问人的按确认超时，`computer_use__run` 按步数，
   带 `verify_command` 的 `engineer__apply` 按验证超时，`github__install` 按 clone + 加载 + 问人 —— 原先一律 30 秒，长任务被半路掐断
+- **等人点头、等设备做完的时间不算进一轮的执行时限**（`core/human_wait.py`）：一轮的时限（规划器 `ExecutionPlan.timeout` 60 秒、主循环每次工具调用的预算）只管机器自己花的时间，
+  用 `run_within` 代替 `asyncio.wait_for`；问人的那段 await 包 `waiting_for_human()`（`request_human_decision`、面板上批），设备做事包 `waiting_on_device()`（`device_boundaries.one_at_a_time`）——
+  它们各有自己的期限（确认超时、设备队列里每件事的期限）。设备队列里的事在交事那一方的上下文里跑（`core/device_queue.run_on_device`）
 
 ### 边说边核（回答里的事实当场核、错了在同一段里改）
 - `core/live_check.py` - 一轮一本账（`TurnLedger`）：工具循环每调一次记一笔（`note_tool_outcome`），流式出字按句交给核对线。只用规则判要不要核（「做好了」、某台设备在线 / 离线），
@@ -159,6 +162,8 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 （`launcher/service_manager.py`）、拓扑图整份落盘（启动时的一百多次登记合成一次，`core/persist_batch.py`）、每个 httpx 客户端各载一遍 CA 证书
 （`core/shared_tls.py`）。**节点子进程的输出写 `logs/nodes/<名字>.log`，不接管道**（没人读的管道写满，子进程卡死在 write() 里；Windows 管道缓冲只有 4KB）。
 进程级单例要 asyncio 锁用 `core.loop_local_lock.LoopLocalLock`（每个事件循环一把）：整个进程一把 `asyncio.Lock` 会绑在第一个排队的循环上，别的循环一来就抛「bound to a different event loop」（会话管理器在 CI 上抓到过）。
+整份重写的落盘（设备每来一帧就整份写一次的那类存储）用 `core.persist_off_loop.OffLoopWriter`：在锁里用 C 编码器编好文本，循环里交给工作线程写、按先后（旧的不盖新的），脚本 / 测试里就地写。
+启动做完时 `gc.freeze()`（`launcher/services.py`）：启动那一大片对象不再进全量回收（第 18 轮真跑：一次全量回收停了循环 0.4 秒）。
 
 ### 节点（各自一个进程的微服务）
 - **缺东西就照实失败，不模拟成功**：没连设备 / 没配 Key / 没有命令时，节点回 `success: false` 并说缺什么（`nodes/common/mock_drivers.py`）；
@@ -271,7 +276,7 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - 电脑没加入网络、也没开任务派发时不起 NATS —— 这是对的状态，不算降级；mDNS 广播不分模式，没配 headscale 时不入 tailnet 只给一行说明（`launcher/bus_phase.py`）；节点进程活着只是慢，说「还在起来」不算降级
 - `core/loop_stall_watch.py` - 事件循环停跳 0.5 秒以上时记下卡在仓库哪几行、最里面卡在库的哪一行、同一时刻别的线程在 import 什么（循环线程可能只是在等 GIL）。日志里「一批请求同一毫秒一起慢」先看它那一行
 - 本机 Ollama 超时不重发（`core/local_llm_policy.py`）：慢不是故障，重发等于从头再算
-- **停进程按 PID / 它自己的进程组，不按命令行里的一个词**（`core/own_process.py::stop_own_process`）：拉起时记下 `Popen`，停时只停它。曾经的 `pkill -f ollama` 会杀掉命令行里任何带 ollama 的进程（人自己开的 Ollama、跑着 `test_*ollama*.py` 的测试分片）；`stop.sh` 的兜底只停工作目录在本仓库里的进程
+- **停进程按 PID / 它自己的进程组，不按命令行里的一个词**（`core/own_process.py::stop_own_process`）：拉起时记下 `Popen`，停时只停它。曾经的 `pkill -f ollama` 会杀掉命令行里任何带 ollama 的进程（人自己开的 Ollama、跑着 `test_*ollama*.py` 的测试分片）；`stop.sh` 的兜底只停工作目录在本仓库里的进程。起自己的子进程带 `OWN_GROUP_KW`（自成一组），起来了却没用上的、要停的用 `stop_and_close`（连孩子一起停、wait 收掉、关管道 —— 撒手不管的进程退了就是僵尸，MCP 服务端那里数到过 8 个）
 - 基础设施那一行（Docker / Podman）按各服务此刻的状态说（`launcher/compose_health.py`）：`compose up -d` 退出码 0 不等于已就绪；起不来的点名。
   起哪几个也在这里定（`infra_services()`）：本地模式不起 nats 容器（与 `nats_wanted()` 同一判据）；redis / qdrant / neo4j / mongodb 的端口只绑 127.0.0.1
 - **控制台只上结论和错误**（`core/console_log.py`）：WARNING 是过程诊断，进 `logs/lumiv.log`，`-v` 才上屏；写控制台在专门的线程里（Windows 控制台被选中文字时挂起写入，曾卡住事件循环 13.8 秒）。别再往控制台 `print` 诊断
