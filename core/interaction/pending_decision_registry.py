@@ -453,7 +453,10 @@ async def request_human_decision(
         except Exception as exc:  # noqa: BLE001
             logger.debug("HITL.request: emit to %s failed: %s", did, exc)
 
-    outcome = await registry.await_decision(record)
+    from core.human_wait import waiting_for_human  # 等人的时间不算进这一轮的执行时限
+
+    async with waiting_for_human():
+        outcome = await registry.await_decision(record)
     await _withdraw_other_branches(delivered, outcome, _emit)
     return outcome
 

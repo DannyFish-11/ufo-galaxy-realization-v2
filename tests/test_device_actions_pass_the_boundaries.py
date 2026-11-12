@@ -196,6 +196,26 @@ def test_bad_parameters_never_reach_the_device(env):
     assert out["success"] is False and "text" in out["error"] and out["params_schema"]["required"] == ["to", "text"]
 
 
+def test_an_action_the_device_did_not_offer_is_refused_before_anyone_is_asked(env):
+    """第 18 轮真跑:设备没报的动作(``teleport``)先去问人要不要做,人点了才发现设备做不了。"""
+    env.add("p1", phone_self(["app_control"]))
+    out = _gate("p1", "teleport")
+    assert out["success"] is False and "teleport" in out["error"] and out["actions"] == ["app_control"], out
+    assert env.asked.decisions == [] and env.asked.confirms == [], "做不了的事不该去问人"
+
+    env.add("p2", phone_self(["app_control"], unavailable={"camera": "相机权限没给"}))
+    out = _gate("p2", "camera")
+    assert "相机权限没给" in out["error"], "设备说了此刻为什么做不了,原因交回模型"
+
+
+def test_asking_on_a_device_waits_as_long_as_a_high_risk_confirmation(env, monkeypatch):
+    """设备上问要不要做,与高风险确认等同样久(此前 60 秒,确认 90 秒,两处说法不一)。"""
+    monkeypatch.setenv("GALAXY_HIGH_RISK_CONFIRM_TIMEOUT_S", "123")
+    env.add("p1", phone_self(["app_control"]))
+    assert _gate("p1", "app_control", {"app": "微信"}) is None
+    assert env.asked.decisions[0]["timeout_s"] == 123.0
+
+
 # ── 经真实的规范设备入口 ─────────────────────────────────────────────────────────
 
 

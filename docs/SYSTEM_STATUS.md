@@ -1180,6 +1180,41 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
 - **留给安卓仓的一处小建议**（不挡合并）：`DeviceCommandFrames.params` 只读顶层 `params`；中心有两条最后兜底的下发路径把参数放在 `payload`（`core/command_router.py`、`core/openclawd.py` 的 WebSocket 兜底），走到那两条时手机会拿到空参数。主路径（`devices__invoke` → `send_command_and_wait`）用的是 `params`，不受影响。
 - 顺带记下：停后端时，后端自己拉起的 `dockerd` 不随之停（父进程退了它还在）——与这次的改动无关，先记下没改。
 
+**第 18 轮（2026-11-12）：** 所有者：「把目前最近所有合并的东西全部完整排查一遍，将所有有问题全部修复，并且跑到真实环境完全没问题为止；然后该完善的全部完善。」
+范围：中心 main 上 2026-11-02 之后合进来的 #1682、#1683、#1671，安卓 #539、手表 #24（都已合进各自的 main）。中心 main 合并后 CI 全绿；两个 App 抽出来的纯 Kotlin 测试 94 项全过。
+真跑用两个 App 自己的 Kotlin 代码（手表 `WatchMember` 的登记 / 能力 / 心跳状态帧、手机 `PhoneSelfDescription`；中心发来的 `command` 交给手机的 `DeviceCommandFrames` + `PhoneCommandExecutor`、
+手表的 `AgentCommandParser` + `AgentCommandExecutor` 执行并生成回执），查出来、已修的：
+
+- **设备没报的动作先去问人**：让手表 `teleport`，手表上先弹「要让…teleport 吗？」，这一轮等到超时，人点了才发现设备做不了。边界第 3 条加 `offered`：动作不在设备报的清单里就不问人、不下发，
+  把清单（设备说了此刻为什么做不了的，连同原因）交回模型；一份清单都没报过的设备不查（`core/device_boundaries.py`，设计文档第 5 节同步）。
+- **等人点头被一轮的执行时限掐掉**：一轮任务的执行时限默认 60 秒，设备上问人给 60 秒、高风险确认给 90 秒 —— 第 60 秒整轮报「任务执行超时」，人在第 70 秒点的「批准」已经没人在等；
+  交给手机的一整段事（默认 180 秒）同样在第 60 秒被报超时。新增 `core/human_wait.py`：等人（`request_human_decision`、面板上批）与等设备做完（`one_at_a_time`）的那一段不算进一轮给机器的时限，
+  规划器与对话主循环的单工具预算都改用 `run_within`；设备上问人与高风险确认等同样久（`GALAXY_HIGH_RISK_CONFIRM_TIMEOUT_S`）。设备队列里的事改在交事那一方的上下文里跑
+  （原先跑在第一次建队列的那一方的上下文里：这一轮的计时、会话号这类 ContextVar 拿到的是别人的）。
+- **通话智能体两处没留引用的后台任务**（插话、在通话界面显示进度）：没人拿着的任务可能做到一半被回收，改由通话自己的任务集合拿着、挂断时一起收。
+- **`android_device_state_store` 整份写盘卡循环 0.6 秒**（第 16 轮记下没改的那一处）：`json.dump` 流式写走的是纯 Python 编码器。改成在锁里用 C 编码器编好文本，
+  在事件循环里交给工作线程写，按先后、旧的不盖新的，清盘时还没写下去的不再写回来（`core/persist_off_loop.py`；脚本 / 测试里照旧就地写）。
+- **一次全量垃圾回收在事件循环里停了 0.4 秒**（最里面是 `_weakrefset._remove`）：启动做完时 `gc.freeze()`，启动那一大片对象不再进全量回收（这里实测：十万个对象的一次全量回收 76 毫秒 → 冻结后 0）。
+- **两条测试在分片里才红**：`test_capabilities_never_loads_the_asr_on_the_event_loop` 读模块里的听写状态全局量，同一文件前面的测试起过的真加载线程（`asr-warmup`）恰好在这时加载失败、
+  把状态改成 failed —— 改为测试自己掌握状态；`test_stop_cancels_the_request_but_the_caller_keeps_running` 等的 ambient 请求一进来就被准入层以 AR_002 拒掉、走不到派发：
+  请求准入的全局仲裁器是进程级单例，前面的测试事件循环关得早（「Task was destroyed but it is pending!」），请求占的名额不还，同一来源漏满 4 个就拒（先漏 4 个再跑这条，旧代码上逐字复现）。
+  `tests/conftest.py` 让每个测试从空名额开始。改动涉及的 1439 个测试文件分 4 片：47,259 通过，只有这两条，修后通过。
+- **最后兜底的两条下发路径不带 `params`**（核对两个 App 时留给安卓仓的建议，其实该中心这边改）：`CommandRouter` 的 WebSocket 兜底与 `openclawd.send_gateway_command` 的最终降级只放 `payload`，
+  安卓 `DeviceCommandFrames.params` 只读 `params`，走到这两条时手机拿到空参数。现在两条都同时带 `params`（与规范下发同一个键）和 `payload`（给旧客户端）（`tests/test_last_resort_device_frames_carry_params.py`）。
+- **MCP 服务端起来了却没接上：记成「在跑」、进程撒手不管变僵尸**（全接口扫描之后后端底下挂着 8 个 `npm exec @model…` 僵尸）：`core/mcp_loader.py` 不看握手的返回值，
+  `npm exec` 在 0.5 秒时还活着（没网在下包）就记成 RUNNING —— 热重载日志里是「postgres / sqlite / memory 已启动，热重载成功：0 个工具」；它后来自己退了没人 wait；重载时直接换掉
+  `server.process`，上一个不停；起进程的 `Popen` 在事件循环上。现在：握手没回结果就是 ERROR 并说原因，进程停掉、收掉、关管道（连它拉起的子进程，自成一组）；重载先停上一个；起与停都在工作线程里。
+  `core/own_process.py` 加 `stop_and_close`（读 stderr 有期限，孙子进程攥着管道也不挂住），`stop_own_process` 强停之后补一次 wait（原先强停的进程同样会留僵尸）
+  （`tests/test_mcp_servers_that_do_not_connect_leave_nothing_behind.py`，旧代码上两条红）。
+- **`dockerd` 不随后端停**（核对两个 App 时记下的）：查下来是对的。没有 systemd 时后端直接拉起 `dockerd`，这与有 systemd 时 `systemctl start docker` 一样 —— 守护进程与 redis / qdrant / neo4j 这些容器
+  本来就要比后端活得久（后端停机从不 `compose down`，下次启动直接接上）；停它会连容器一起停。不改。
+- **真跑**（修后的工作树，`main.py --backend -v`，独立数据目录，假模型；设备全用两个 App 的 Kotlin 代码）：手表 `haptic` / `heart_rate`、手机 `notification` / `location` 由 App 自己的执行器做完、回执由它们生成；
+  手表 `notify` 缺 `text` → 0.1 秒拒、没发给手表；手表没有的 `teleport` → 0.1 秒拒、没人被问、把手表报的 5 个动作交回模型；交给手机一整段目标、手机 75 秒后才回结果 → 回答是手机的结果（修前第 60 秒「任务执行超时」）；
+  电脑发起删文件 → 手机与手表都被问，手机 70 秒后点「批准」→ 删好、手表那条收到 `decision_withdraw`（`answered_elsewhere`）、没有挂着的批准。全接口扫描 GET 250 条、写接口 124 条：没有 500；
+  503 / 4xx 都是照实说缺什么（WebRTC / 视觉节点没起、沙箱里没有 TTS、没配 Google 登录、没配 headscale）或扫描造的参数；慢的只剩本来就慢的（局域网扫描、模型辩论、重载全部协议、视觉等帧超时、不结束的流）。
+  两次启动、设备场景、全接口扫描、MCP 重载三遍，事件循环一次也没卡过（修前这一轮同样的跑法卡过 0.4 / 0.6 秒，上面两条修的；另有一次 1.2 秒是循环在等 GIL —— 同一时刻别的线程在 import kokoro_onnx，没改，这次没再出现）；修 MCP 之后重载三遍，没有僵尸、没有留下的 npm 进程。`.env` 前后哈希一致。
+  日志里剩下的 WARNING 都是这台机器缺东西（没网、没 TTS、没托盘依赖）或假模型答不了结构化提问；手机登记帧没有 `platform`（真 App 也不带，平台在能力上报里）记一次「协议漂移：缺字段」，照设计如实登记，不改。
+
 ### 6.21 2026-10-19：跨设备拆闸与正名（整体方案阶段 0）
 
 所有者的定义：中心智能体协调一切；「主脑」是一个角色——智能体跑在哪台设备上，哪台就是主脑；每台有跨设备能力的设备打开**自己的**跨设备、登录加入，
@@ -1661,7 +1696,6 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |
 |---|---|---|
-| **安卓 App 回答批准:等安卓 #539 合并** | 中心这边已按设备声明问(第 15 轮):手机答不了时在电脑面板 / 别的声明了能批的设备上问,并告诉手机去哪儿批;只认被问到的设备的回答(第 16 轮)。安卓 #539 已做 A1(处理 `decision_request` / `decision_withdraw`、通知上的按钮经 `human_input` 回)、A2(声明 `approvals`)、A3(进度句当进度),手表 #24 已做 W1;见 6.43 | 要求逐条见 **[DEVICE_CLIENT_REQUIREMENTS.md](DEVICE_CLIENT_REQUIREMENTS.md)**;两个客户端 PR 合并、装上新版之前,手机发起的危险动作仍在电脑面板上批 |
 | 多设备（mesh / federation）没有真机证据 | 运行时登记 `structural_only`（第 4、5.3 节） | 缺的是真机多设备环境里的运行证据，不是代码 |
 | 注册下游步骤不完整时只记账、不阻断 | G002（第 5.2 节） | 所有者 2026-09-28 答复：**后面做**，和未接线代码的处置放在一块儿 |
 | 面板：拓扑/可观测视图没搬进面板 | `PANEL_SURFACE_CONVERGENCE.md`「未做」 | 属于面板设计 |

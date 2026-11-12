@@ -8724,12 +8724,14 @@ class OpenClawd:
                     # 再点下去。写死的后果是 ask_human__request 声明的 timeout_s
                     # 形同虚设,而高风险工具的确认闸刚把决策推上手表就被取消 ——
                     # 用户手指落下时已经没人在等那个答案了。详见 tool_call_timeout_s。
+                    # 等人点头、等设备做完的那一段不算进预算(core/human_wait.py:它们各有自己的期限)
+                    from core.human_wait import run_within
                     from core.tool_permissions import tool_call_timeout_s
 
                     _budget_s = tool_call_timeout_s(tc_name, tc_args)
                     t0 = _time.time()
                     try:
-                        result = await _asyncio.wait_for(self._dispatch_tool_call(tc_name, tc_args), timeout=_budget_s)
+                        result = await run_within(self._dispatch_tool_call(tc_name, tc_args), _budget_s)
                     except _asyncio.TimeoutError:
                         result = {"success": False, "error": f"工具 {tc_name} 执行超时 ({_budget_s:.0f}s)"}
                     elapsed_ms = (_time.time() - t0) * 1000
@@ -10123,6 +10125,7 @@ class OpenClawd:
                 {
                     "type": "command",
                     "command": command,
+                    "params": payload or {},  # 设备读的是 params(与规范下发同一个键);payload 给旧客户端
                     "payload": payload or {},
                     "command_id": command_id,
                     "task_id": task_id,

@@ -4654,8 +4654,7 @@ class CommandRouter:
         # ── Canonical chain: delegate to DeviceRouter (preferred transport path)
         # This implements the CommandRouter → DeviceRouter hop in the canonical
         # execution chain.  DeviceRouter.send_command_to_device() is the terminal
-        # transport step that owns the WebSocket session handles.
-        # Falls through to connection_manager when DeviceRouter is unavailable.
+        # transport step that owns the WebSocket session handles; falls through to connection_manager without it.
         _dr_result = await self._dispatch_via_device_router(
             device_id=device_id,
             command=command,
@@ -4704,6 +4703,7 @@ class CommandRouter:
                 {
                     "type": "command",
                     "command": command,
+                    "params": payload,  # 设备读的是 params(与规范下发 send_command_and_wait 同一个键);payload 给旧客户端
                     "payload": payload,
                     "command_id": command_id,
                     "task_id": task_id,

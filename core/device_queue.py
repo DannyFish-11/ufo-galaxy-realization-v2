@@ -11,10 +11,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import os
 from typing import Any, Awaitable, Callable, Dict, Tuple
 
+from core.human_wait import run_within
 from core.queueing.async_queue import AsyncTaskQueue, QueueFullError
 
 logger = logging.getLogger("Galaxy.DeviceQueue")
@@ -23,6 +25,8 @@ logger = logging.getLogger("Galaxy.DeviceQueue")
 MAX_WAITING = 32
 #: 一件事默认最长做多久(秒);委派整段目标的会传更长的。
 DEFAULT_TIMEOUT_S = 120.0
+#: 队列那一层的兜底:一件事里等人的那一段不算进它的期限,人最久等 ``ask_human`` 的上限 3600 秒。
+HUMAN_BACKSTOP_S = 3600.0
 
 _queues: Dict[Tuple[int, str], AsyncTaskQueue] = {}
 
@@ -57,8 +61,15 @@ async def run_on_device(
     if not device_id:
         return await job()
     q = await _queue_for(device_id)
+    ctx = contextvars.copy_context()
+
+    async def in_callers_context() -> Dict[str, Any]:
+        # 在交这件事的那一方的上下文里做(这一轮的计时、会话号……,队列的工位是第一次建队列的那一方起的);
+        # 做多久按 timeout 算,中途停下来等人点头的那一段不算(core/human_wait.py:人有自己的确认超时)
+        return await asyncio.create_task(run_within(job(), timeout), context=ctx)
+
     try:
-        fut = await q.submit(job, timeout=timeout)
+        fut = await q.submit(in_callers_context, timeout=timeout + HUMAN_BACKSTOP_S)
     except QueueFullError:
         return {"success": False, "error": f"「{device_id}」手上已经排着 {MAX_WAITING} 件事了,等它做完一些再交"}
     try:

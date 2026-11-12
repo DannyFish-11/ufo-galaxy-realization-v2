@@ -125,8 +125,10 @@ def test_many_concurrent_requests_fuzz():
 
 
 def test_child_task_inherits_parent_identity():
-    """openclawd 实际派发路径是 `asyncio.wait_for(self._dispatch_tool_call(...))`,
-    wait_for 会把协程包成新任务 → 新任务复制创建时的上下文,必须继承父身份。"""
+    """openclawd 实际派发路径是 `run_within(self._dispatch_tool_call(...), 预算)`(core/human_wait.py,
+    等人的时间不计时;此前是 `asyncio.wait_for`)。两者都把协程包成新任务 → 新任务复制创建时的上下文,必须继承父身份。"""
+    from core.human_wait import run_within
+
     oc = _bare()
 
     async def main():
@@ -136,11 +138,13 @@ def test_child_task_inherits_parent_identity():
         async def dispatch():
             return (oc._current_device_id, oc._current_trace_id)
 
+        via_run_within = await run_within(dispatch(), 5)
         via_wait_for = await asyncio.wait_for(dispatch(), timeout=5)
         via_create_task = await asyncio.get_running_loop().create_task(dispatch())
-        return via_wait_for, via_create_task
+        return via_run_within, via_wait_for, via_create_task
 
-    wf, ct = asyncio.run(main())
+    rw, wf, ct = asyncio.run(main())
+    assert rw == ("dev-parent", "tr-parent"), f"run_within 子任务未继承父身份: {rw}"
     assert wf == ("dev-parent", "tr-parent"), f"wait_for 子任务未继承父身份: {wf}"
     assert ct == ("dev-parent", "tr-parent"), f"create_task 子任务未继承父身份: {ct}"
 

@@ -362,10 +362,9 @@ def test_capabilities_never_loads_the_asr_on_the_event_loop(client, monkeypatch)
     """
     import core.modality_bridge as mb
 
-    loads, warms = [], []
-    monkeypatch.setattr(mb, "_asr_singleton", None)
-    monkeypatch.setattr(mb, "_asr_failed", False)
-    monkeypatch.setattr(mb, "_asr_warming", False)
+    # 状态由这里掌握,不读模块里的那几个全局量:前面的测试起过的真加载线程(``asr-warmup``)可能正好在这时
+    # 加载失败、把 ``_asr_failed`` 置上(分片里跑出来过:warms == [])
+    loads, warms, state = [], [], ["cold"]
 
     def slow_load():
         loads.append(1)
@@ -373,8 +372,9 @@ def test_capabilities_never_loads_the_asr_on_the_event_loop(client, monkeypatch)
 
     def warm():
         warms.append(1)
-        mb._asr_warming = True
+        state[0] = "warming"
 
+    monkeypatch.setattr(mb, "asr_state", lambda: state[0])
     monkeypatch.setattr(mb, "_get_asr", slow_load)
     monkeypatch.setattr(mb, "warm_asr_in_background", warm)
     body = client.get("/v1/audio/capabilities").json()
@@ -385,7 +385,7 @@ def test_capabilities_never_loads_the_asr_on_the_event_loop(client, monkeypatch)
         pass
 
     ready = FakeASR()
-    monkeypatch.setattr(mb, "_asr_singleton", ready)
+    state[0] = "ready"
     monkeypatch.setattr(mb, "_get_asr", lambda: ready)
     body = client.get("/v1/audio/capabilities").json()
     assert body["asr"] == {"state": "ready", "active_engine": "FakeASR"}

@@ -8,7 +8,8 @@
 == ================================= ======================================================================
 1  成员资格                            :func:`member`:在名册里;讲 AIP 的设备此刻连着;开了设备准入的,接入时批准过
 2  权限门与自治档位,按 ``effect`` 判    :func:`permission`(表见下)
-3  参数合法                            :func:`params_ok`:按设备自述里这个动作的 ``params`` 校验,不合法不发,原因交回模型
+3  参数合法                            :func:`offered`:动作在设备报的清单里;:func:`params_ok`:按设备自述里这个动作的
+                                       ``params`` 校验。不合法不发、不问人,原因交回模型
 4  主动打扰有额度                      :func:`interrupt_budget`:智能体自发的 ``notify`` 计入每小时额度;有设备报了
                                        「此刻明确别打扰」时,自发的不发。人在等结果的请求不算主动打扰
 5  每台设备串行;每次下发必有结果;      :func:`one_at_a_time`(串行、必有结果)与 :func:`record_start` / :func:`record_end`
@@ -61,7 +62,7 @@ GO, ASK, CONFIRM = "go", "ask", "confirm"
 BOUNDARIES: Dict[int, Tuple[str, ...]] = {
     1: ("member",),
     2: ("permission",),
-    3: ("params_ok",),
+    3: ("offered", "params_ok"),
     4: ("interrupt_budget",),
     5: ("one_at_a_time", "record_start", "record_end"),
     6: ("as_reported",),
@@ -179,6 +180,13 @@ def _grant_from(outcome: Any) -> str:
     return chosen if chosen in ("once", "session", "always") else ""
 
 
+def _human_wait_s() -> float:
+    """设备上问人等多久:与高风险确认同一个(``GALAXY_HIGH_RISK_CONFIRM_TIMEOUT_S``,默认 90 秒)。"""
+    from core.interaction.high_risk_confirmation import _timeout_s
+
+    return _timeout_s()
+
+
 async def _ask_on_device(what: str, effect: str, session_id: str, targets: list) -> str:
     from core.interaction.pending_decision_registry import OnTimeout, request_human_decision
 
@@ -190,6 +198,7 @@ async def _ask_on_device(what: str, effect: str, session_id: str, targets: list)
             default_option=None,
             on_timeout=OnTimeout.CANCEL,
             urgency="normal",
+            timeout_s=_human_wait_s(),
             devices=targets,
             session_id=session_id,
             runtime_session_id=session_id,
@@ -299,6 +308,23 @@ def params_ok(spec: Dict[str, Any], action: str, params: Dict[str, Any]) -> Opti
     }
 
 
+def offered(device_id: str, action: str) -> Optional[Dict[str, Any]]:
+    """这个动作在不在设备报的清单里。报了清单、它不在里面:不问人要不要做、不发给设备,把清单交回模型。
+
+    否则一个设备根本没有的动作会先按「改设备状态」去问人要不要做(第 18 轮真跑:让手表 teleport,手表上弹出
+    「要让「真跑手表」teleport吗?」,这一轮等到超时)。一份清单都没报过的设备没有可对照的,不查。
+    """
+    from core.device_self import described
+
+    said = described(getattr(_device(device_id), "metadata", None) or {})
+    names = [str(a.get("name")) for a in said.get("actions") or [] if a.get("name")]
+    if not names or action in names:
+        return None
+    why = next((str(u.get("reason") or "") for u in said.get("unavailable") or [] if u.get("name") == action), "")
+    error = f"「{_name(device_id)}」" + (f"此刻做不了「{action}」:{why}" if why else f"没有「{action}」这个动作")
+    return {"success": False, "error": error + ",没有发给设备", "actions": names}
+
+
 # ── 4 主动打扰有额度 ────────────────────────────────────────────────────────────
 
 #: 额度窗口(秒)
@@ -364,7 +390,8 @@ async def gate(device_id: str, action: str, params: Dict[str, Any], session_id: 
     """讲 AIP 的设备下发前过 3 → 4 → 2(便宜的先查,问人放最后)。可以发返回 None;不能发返回交回智能体的结果。"""
     spec = action_spec(device_id, action)
     return (
-        params_ok(spec, action, params)
+        offered(device_id, action)
+        or params_ok(spec, action, params)
         or interrupt_budget(device_id, effect_of(spec, action))
         or await permission(device_id, action, params, spec, session_id)
     )
@@ -379,8 +406,10 @@ async def one_at_a_time(
     """在这台设备的队列里做(前面的做完才轮到它,不同设备照样并行),一定回一个结果:
     成了、没成的原因,或做了多久没做完。"""
     from core.device_queue import DEFAULT_TIMEOUT_S, run_on_device
+    from core.human_wait import waiting_on_device
 
-    r = await run_on_device(device_id, job, timeout=timeout or DEFAULT_TIMEOUT_S)
+    async with waiting_on_device():  # 设备那边的期限管它做多久;不再算进这一轮给机器的时限
+        r = await run_on_device(device_id, job, timeout=timeout or DEFAULT_TIMEOUT_S)
     if not isinstance(r, dict):
         return {"success": False, "error": f"「{_name(device_id)}」那边没有回结果"}
     if "success" not in r:
