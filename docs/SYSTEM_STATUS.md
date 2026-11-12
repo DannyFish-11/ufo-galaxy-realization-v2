@@ -1206,6 +1206,8 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
   `server.process`，上一个不停；起进程的 `Popen` 在事件循环上。现在：握手没回结果就是 ERROR 并说原因，进程停掉、收掉、关管道（连它拉起的子进程，自成一组）；重载先停上一个；起与停都在工作线程里。
   `core/own_process.py` 加 `stop_and_close`（读 stderr 有期限，孙子进程攥着管道也不挂住），`stop_own_process` 强停之后补一次 wait（原先强停的进程同样会留僵尸）
   （`tests/test_mcp_servers_that_do_not_connect_leave_nothing_behind.py`，旧代码上两条红）。
+- **CI 的浏览器行为测试装不上 Chromium**：GitHub 的 `ubuntu-latest` 换成了 Ubuntu 26.04，锁定的 Playwright 1.56.1 不认这个系统（`Playwright does not support chromium on ubuntu26.04-x64`），
+  与这一轮的改动无关、main 下一次跑同样会红。浏览器测试的 Playwright 升到 1.64.1（认 26.04；锁文件由 npm 重新生成），本地 24 项全过。
 - **`dockerd` 不随后端停**（核对两个 App 时记下的）：查下来是对的。没有 systemd 时后端直接拉起 `dockerd`，这与有 systemd 时 `systemctl start docker` 一样 —— 守护进程与 redis / qdrant / neo4j 这些容器
   本来就要比后端活得久（后端停机从不 `compose down`，下次启动直接接上）；停它会连容器一起停。不改。
 - **真跑**（修后的工作树，`main.py --backend -v`，独立数据目录，假模型；设备全用两个 App 的 Kotlin 代码）：手表 `haptic` / `heart_rate`、手机 `notification` / `location` 由 App 自己的执行器做完、回执由它们生成；
